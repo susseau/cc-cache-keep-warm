@@ -25,11 +25,12 @@ export const PING_MARGIN_MS = MINUTE_MS
 export const DEFAULT_MAX_PINGS = 8
 export const MAX_PINGS_CAP = 20
 
-// The `max_pings` option as a whole number from 1 to MAX_PINGS_CAP; anything else, the default.
+// The `max_pings` option as a whole number brought into 1..MAX_PINGS_CAP; not a number, the default.
 export function pingLimit(option: unknown) {
-  if (typeof option !== 'number' || !Number.isFinite(option) || option < 1) return DEFAULT_MAX_PINGS
-  return Math.min(Math.floor(option), MAX_PINGS_CAP)
+  if (typeof option !== 'number' || !Number.isFinite(option)) return DEFAULT_MAX_PINGS
+  return Math.min(Math.max(Math.floor(option), 1), MAX_PINGS_CAP)
 }
+
 // A request reading at least this share of the conversation from cache found it still warm.
 const HIT_SHARE = 0.5
 

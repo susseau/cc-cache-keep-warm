@@ -33,7 +33,7 @@
     "max_pings": {
       "type": "number",
       "title": "Pings in a row",
-      "description": "Without a stop time, keep-warm stops itself after this many pings in a row, about one an hour (1 to 20; 8 is about 7 hours). Any real turn in the conversation starts the count over",
+      "description": "Without a stop time, keep-warm stops itself after this many pings in a row, one about every 52 minutes (1 to 20; 8 is about 7 hours). Any real turn in the conversation starts the count over",
       "default": 8,
       "min": 1,
       "max": 20

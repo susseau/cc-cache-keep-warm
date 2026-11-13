@@ -95,7 +95,7 @@ Click **Keep warm** on the line, or type a command:
 | `/keepwarm off` | Stop (or click **Stop**) |
 | `/keepwarm` | Show the state and the last pings |
 
-Keep-warm is **off by default** and you switch it **per session**: only the sessions you want are kept warm. To have it on in every new session, turn on the **On in new sessions** setting. It stops by itself after about 7 hours (8 pings in a row, the **Pings in a row** setting) unless you gave it a time: each ping costs a tenth of what one re-write does, and the longer the break, the less likely it ends soon.
+Keep-warm is **off by default** and you switch it **per session**: only the sessions you want are kept warm. To have it on in every new session, turn on the **On in new sessions** setting. It stops by itself after about 7 hours (8 pings in a row, the **Pings in a row** setting) unless you gave it a time: each ping costs about a twentieth of what one re-write does, and the longer the break, the less likely it ends soon.
 
 ### Reading the line
 

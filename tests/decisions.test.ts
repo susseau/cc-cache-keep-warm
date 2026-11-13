@@ -83,12 +83,13 @@ test('decidePing: the stops, and the visible ping', async () => {
   expect(decidePing(check({ needsVisible: true, nearlyFull: true }))).toEqual('blocked')
 })
 
-test('pingLimit: the max_pings option, 1 to 20, else 8', async () => {
+test('pingLimit: the max_pings option brought into 1..20; not a number, 8', async () => {
   expect(pingLimit(undefined)).toEqual(8)
   expect(pingLimit(12)).toEqual(12)
   expect(pingLimit(3.7)).toEqual(3)
   expect(pingLimit(50)).toEqual(20)
-  expect(pingLimit(0)).toEqual(8)
+  expect(pingLimit(0)).toEqual(1)
+  expect(pingLimit(Number.NaN)).toEqual(8)
   expect(pingLimit('12')).toEqual(8)
 })
 
