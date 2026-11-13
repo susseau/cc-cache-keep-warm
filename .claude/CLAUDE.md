@@ -4,10 +4,11 @@ A Claude Code mod (a plugin of function hooks). The code is in `hooks/` (below),
 
 ## Code layout
 
-`hooks/hooks.json` loads `hooks/register.tsx`, which only wires the events to the modules that own them. Each module either reads and writes (takes `$`) or decides (pure, no `$`), never both:
+`hooks/hooks.json` loads `hooks/register.tsx`, which only wires the events to the modules that own them. The decisions sit in pure modules (no `$`, no state module): `decide-ttl.ts`, `decide-ping.ts`, `line-model.ts`, `session-snapshot.ts`, `format.ts`, `cache-timing.ts`; `command.ts` keeps its pure `parseStop` / `statusText` next to the handler:
 
-- `register.tsx`: the `on(...)` hooks and the two userConfig options; no logic of its own.
-- `state.ts`: every `$.state` ref (private), `live` (module variables), `readSnapshot` / `writeSession`, `needsVisiblePing`.
+- `register.tsx`: the `on(...)` hooks and the two userConfig options; only which event goes where.
+- `state.ts`: every `$.state` ref (private), `live` (module variables), `readSnapshot` / `writeSession`, `appendPing`.
+- `session-snapshot.ts`: the `SessionSnapshot` type and `needsVisiblePing` (pure).
 - `session-store.ts`: `$.store`: save, restore after a relaunch, the weekly clean-up, `plan-ttl`.
 - `cache-timing.ts`: the shared lengths and limits (ping lead, 20 pings, 30-min minimum), `isCacheHit`.
 - `format.ts`: minutes, clock time, token counts.

@@ -4,7 +4,7 @@ import { expect, test } from 'claude-code/testing'
 import { parseStop, statusText } from '../hooks/command'
 import { lineModel } from '../hooks/line/line-model'
 import { decidePing, isTooFullForVisiblePing, type PingCheck } from '../hooks/ping/decide-ping'
-import type { SessionSnapshot } from '../hooks/state'
+import type { SessionSnapshot } from '../hooks/session-snapshot'
 import { correctTtl, decideTtl, parseTtl, shortAfterGap, type TtlMemory, type TtlSources } from '../hooks/ttl/decide-ttl'
 import { MINUTE, READ, START, WRITE } from './engine'
 
@@ -28,7 +28,7 @@ test('parseTtl reads any length and nothing else', async () => {
 test('decideTtl: settings first, then the plan', async () => {
   expect(decideTtl(sources({ isFiveMinutesForced: true, isHourEnabled: true }), memory()).ttl).toEqual({ ms: 5 * MINUTE, reason: 'setting' })
   expect(decideTtl(sources({ envTtlMs: 30 * MINUTE }), memory()).ttl).toEqual({ ms: 30 * MINUTE, reason: 'setting' })
-  expect(decideTtl(sources({ rateLimits: [{ kind: 'five_hour', percentUsed: 40 }] }), memory())).toEqual({ ttl: SUBSCRIPTION_TTL, isPlan: true, sawPlanWindows: true })
+  expect(decideTtl(sources({ rateLimits: [{ kind: 'five_hour', percentUsed: 40 }] }), memory())).toEqual({ ttl: SUBSCRIPTION_TTL, isWorthRemembering: true, sawPlanWindows: true })
   expect(decideTtl(sources({ rateLimits: [{ kind: 'seven_day', percentUsed: 100 }] }), memory()).ttl).toEqual({ ms: 5 * MINUTE, reason: 'overage' })
 })
 

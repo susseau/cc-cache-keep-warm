@@ -192,7 +192,7 @@ A mod runs inside Claude Code with your permissions, so here is everything this 
 
 Only the **keep-warm ping**, and only while keep-warm is on: about 8 minutes before the cache would expire, so about once every 52 minutes.
 
-The mod asks Claude Code to send this session's last request again, with one line added: `Keep-warm ping. Reply with just "ok".` (the `$.model.fork` call in [`hooks/register.tsx`](hooks/register.tsx)). It goes **to Anthropic, through Claude Code's own connection, on your own account**, like any message you send. That request reads your conversation from the cache, which is what keeps it warm. The answer is thrown away, and nothing is added to your conversation.
+The mod asks Claude Code to send this session's last request again, with one line added: `Keep-warm ping. Reply with just "ok".` (the `$.model.fork` call in [`hooks/ping/ping.ts`](hooks/ping/ping.ts)). It goes **to Anthropic, through Claude Code's own connection, on your own account**, like any message you send. That request reads your conversation from the cache, which is what keeps it warm. The answer is thrown away, and nothing is added to your conversation.
 
 After an app restart, Claude Code can repeat a session's request this way only once the session has answered again. Until then the ping is a short message the mod sends into the chat instead (the `$.prompt.submit` call): `Keep-warm ping from the Cache Keep-Warm mod. Reply with exactly "ok" and nothing else. Use no tools.` Claude answers "ok", and from then on the pings are invisible again. Same destination, same account, and the same rule: only in the last minutes before the cache would expire, never once it is cold.
 

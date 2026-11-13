@@ -3,8 +3,9 @@ import type { EngineInterface } from 'claude-code'
 
 import { HOUR_MS, isTooShortToKeepWarm, KEEP_WARM_MIN_TTL_MS, MAX_PINGS, MINUTE_MS, PING_LEAD_MS } from './cache-timing'
 import { cacheLength, clockTime, minutes, tokens } from './format'
-import { setKeepWarm } from './keep-warm-switch'
-import { needsVisiblePing, readSnapshot, type SessionSnapshot } from './state'
+import { switchOff, switchOn } from './keep-warm-switch'
+import { needsVisiblePing, type SessionSnapshot } from './session-snapshot'
+import { readSnapshot } from './state'
 
 export const COMMAND = {
   name: 'keepwarm',
@@ -22,11 +23,11 @@ export async function runKeepwarm($: EngineInterface, args: string) {
   const words = args.trim().toLowerCase()
   const [first = ''] = words.split(/\s+/)
   if (first === 'off') {
-    await setKeepWarm($, false, 0)
+    await switchOff($)
   } else if (words !== '' && words !== 'status') {
     const stopAt = parseStop(first === 'on' ? words.slice(2).trim() : words, await $.clock.now())
     if (stopAt < 0) return { text: NOT_UNDERSTOOD }
-    await setKeepWarm($, true, stopAt)
+    await switchOn($, stopAt)
   }
   return { text: statusText(await readSnapshot($)) }
 }

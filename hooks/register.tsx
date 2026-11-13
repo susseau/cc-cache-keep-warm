@@ -5,7 +5,7 @@ import type { Register } from 'claude-code'
 import { COMMAND, runKeepwarm } from './command'
 import { carryOnResumed, markStartedNew, replacesConversation, startOver, startSession } from './events/session'
 import { finishRequest, finishTurn, startRequest } from './events/turn'
-import { setKeepWarm } from './keep-warm-switch'
+import { switchOff, switchOn } from './keep-warm-switch'
 import { lineModel } from './line/line-model'
 import { drawLine } from './line/line-view'
 import { live, readSnapshot, writeSession } from './state'
@@ -72,11 +72,12 @@ export const register: Register = (on, options) => {
     }
   })
 
+  // A literal on purpose: the validator reads a constant matcher as command=?. Same as COMMAND.name.
   on('command.run', { command: 'keepwarm' }, async ($, e) => runKeepwarm($, e.args))
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const session = await readSnapshot($)
-    return drawLine($.ui.resolve(e), lineModel(session, e.surface), () => setKeepWarm($, !session.isOn, 0))
+    return drawLine($.ui.resolve(e), lineModel(session, e.surface), () => (session.isOn ? switchOff($) : switchOn($, 0)))
   })
 }

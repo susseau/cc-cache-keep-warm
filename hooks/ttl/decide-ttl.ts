@@ -33,9 +33,10 @@ export type TtlMemory = {
   answersWithoutPlan: number
 }
 
-// `isPlan`: the length comes from the plan's windows, worth remembering for the next session.
+// `isWorthRemembering`: a length the next session should start from: the plan's windows, or
+// their lasting absence (an API key).
 // `sawPlanWindows`: the windows were there, which starts the answers without them over.
-export type TtlDecision = { ttl: KeepWarmTtl, isPlan: boolean, sawPlanWindows: boolean }
+export type TtlDecision = { ttl: KeepWarmTtl, isWorthRemembering: boolean, sawPlanWindows: boolean }
 
 // "5m", "1h", "30m", "90s": any length, so a cache length Claude Code adds later still reads.
 export function parseTtl(value: unknown) {
@@ -49,13 +50,13 @@ export function parseTtl(value: unknown) {
 // limits gets the hour, one over its limit (paying usage credits) and an API key get 5 minutes.
 export function decideTtl(sources: TtlSources, memory: TtlMemory): TtlDecision {
   const setting = settingTtl(sources)
-  if (setting) return { ttl: setting, isPlan: false, sawPlanWindows: false }
+  if (setting) return { ttl: setting, isWorthRemembering: false, sawPlanWindows: false }
 
   const plan = sources.rateLimits.filter(w => PLAN_WINDOWS.includes(w.kind))
   if (plan.length > 0) {
     const isOverLimit = plan.some(w => w.percentUsed >= PLAN_LIMIT_PERCENT)
     const ttl = isOverLimit ? { ms: FIVE_MIN_MS, reason: 'overage' as const } : { ms: HOUR_MS, reason: 'subscription' as const }
-    return { ttl, isPlan: true, sawPlanWindows: true }
+    return { ttl, isWorthRemembering: true, sawPlanWindows: true }
   }
   return ttlWithoutPlanWindows(sources.sawResponse, memory)
 }
@@ -76,10 +77,10 @@ function ttlWithoutPlanWindows(sawResponse: boolean, { planTtl, savedTtl, answer
   const known = planTtl && planTtl.reason !== 'api' ? planTtl : undefined
   if (!sawResponse) {
     const ttl = (savedTtl?.reason === 'api' ? known : savedTtl) ?? planTtl ?? null
-    return { ttl, isPlan: false, sawPlanWindows: false }
+    return { ttl, isWorthRemembering: false, sawPlanWindows: false }
   }
-  if (known && answersWithoutPlan < API_AFTER_ANSWERS) return { ttl: known, isPlan: false, sawPlanWindows: false }
-  return { ttl: { ms: FIVE_MIN_MS, reason: 'api' }, isPlan: true, sawPlanWindows: false }
+  if (known && answersWithoutPlan < API_AFTER_ANSWERS) return { ttl: known, isWorthRemembering: false, sawPlanWindows: false }
+  return { ttl: { ms: FIVE_MIN_MS, reason: 'api' }, isWorthRemembering: true, sawPlanWindows: false }
 }
 
 // What the cache actually did beats what the settings say: if it went cold after a gap it

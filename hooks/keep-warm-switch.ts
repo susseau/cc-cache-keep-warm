@@ -5,8 +5,16 @@ import { live, writeSession } from './state'
 import { syncTitle } from './title'
 
 // Switching starts the pings in a row over; `stopAt` 0 means no stop time.
-export async function setKeepWarm($: EngineInterface, isOn: boolean, stopAt: number) {
-  await writeSession($, { isOn, stopAt: isOn ? stopAt : 0, pings: [], pingError: '' })
+export async function switchOn($: EngineInterface, stopAt: number) {
+  await applySwitch($, true, stopAt)
+}
+
+export async function switchOff($: EngineInterface) {
+  await applySwitch($, false, 0)
+}
+
+async function applySwitch($: EngineInterface, isOn: boolean, stopAt: number) {
+  await writeSession($, { isOn, stopAt, pings: [], pingError: '' })
   await save($)
   await syncTitle($)
 }
@@ -17,5 +25,5 @@ export async function setKeepWarm($: EngineInterface, isOn: boolean, stopAt: num
 export async function switchOnIfNew($: EngineInterface) {
   if (!live.defaultOn || !live.isUnseen || !live.startedNew) return
   live.isUnseen = false
-  await setKeepWarm($, true, 0)
+  await switchOn($, 0)
 }

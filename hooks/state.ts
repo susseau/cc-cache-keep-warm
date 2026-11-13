@@ -1,7 +1,8 @@
-import type { EngineInterface } from 'claude-code'
+import type { EngineInterface, ModelUsage } from 'claude-code'
 
 import type { KeepWarmPing, KeepWarmTtl } from '../types'
-import { MAX_PINGS } from './cache-timing'
+import { isCacheHit, MAX_PINGS } from './cache-timing'
+import type { SessionSnapshot } from './session-snapshot'
 
 // Per-session values in $.state: they survive a reload of the module, not an app relaunch (the
 // session store in session-store.ts carries the ones that must). Only this file touches them:
@@ -64,23 +65,6 @@ export const live: {
   roomChecked: false,
 }
 
-// Everything the line and /keepwarm show, read in one go.
-export type SessionSnapshot = {
-  lastRequestAt: number
-  now: number
-  isOn: boolean
-  stopAt: number
-  pings: KeepWarmPing[]
-  ttl: KeepWarmTtl
-  contextTokens: number
-  isWaiting: boolean
-  shortAfterMs: number
-  waitsForMessage: boolean
-  sawResponse: boolean
-  pingError: string
-  nearlyFull: boolean
-}
-
 export async function readSnapshot($: EngineInterface): Promise<SessionSnapshot> {
   const [last, now, isOn, stopAt, pings, ttl, context, waiting, shortAfter, waits, sawResponse, pingError, nearlyFull] = await Promise.all([
     $.state.get(LAST), $.state.get(NOW), $.state.get(KEEP_WARM), $.state.get(STOP_AT), $.state.get(PINGS), $.state.get(TTL), $.state.get(CONTEXT),
@@ -101,12 +85,6 @@ export async function readSnapshot($: EngineInterface): Promise<SessionSnapshot>
     pingError: pingError.value ?? '',
     nearlyFull: nearlyFull.value ?? false,
   }
-}
-
-// Before the conversation has answered in this run, Claude Code has nothing to repeat
-// invisibly, so the next ping has to be a real message.
-export function needsVisiblePing({ sawResponse, waitsForMessage }: Pick<SessionSnapshot, 'sawResponse' | 'waitsForMessage'>) {
-  return !sawResponse || waitsForMessage
 }
 
 // Writes the values given, each under its own key.
@@ -136,7 +114,9 @@ export async function markRestored($: EngineInterface) {
   await $.state.set(RESTORED, true)
 }
 
-export async function appendPing($: EngineInterface, ping: KeepWarmPing) {
+// A ping (invisible or visible) and what its request found in the cache.
+export async function appendPing($: EngineInterface, at: number, usage: ModelUsage) {
+  const ping: KeepWarmPing = { at, isHit: isCacheHit(usage), read: usage.cache_read_input_tokens }
   const { value: pings = [] } = await $.state.get(PINGS)
   await $.state.set(PINGS, [...pings, ping].slice(-MAX_PINGS))
 }

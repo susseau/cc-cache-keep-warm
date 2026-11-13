@@ -1,7 +1,7 @@
 // What the line above the prompt says, decided from the session's values alone.
 import { HOUR_MS, isLongEnoughToKeepWarm, MINUTE_MS, PING_LEAD_MS } from '../cache-timing'
 import { cacheLength, clockTime, minutes, timeLeft, tokens } from '../format'
-import { needsVisiblePing, type SessionSnapshot } from '../state'
+import { needsVisiblePing, type SessionSnapshot } from '../session-snapshot'
 
 // Blocks that empty over the cache's life: filled blocks green while keep-warm is on (grey
 // otherwise), outlined blocks for the time already gone.

@@ -4,8 +4,9 @@ import type { EngineInterface, SessionUsage } from 'claude-code'
 import type { KeepWarmTtl } from '../../types'
 import { MAX_PINGS, MINUTE_MS } from '../cache-timing'
 import { clockTime } from '../format'
-import { setKeepWarm } from '../keep-warm-switch'
-import { live, needsVisiblePing, readSnapshot, type SessionSnapshot, writeSession } from '../state'
+import { switchOff } from '../keep-warm-switch'
+import { needsVisiblePing, type SessionSnapshot } from '../session-snapshot'
+import { live, readSnapshot, writeSession } from '../state'
 import { detectTtl } from '../ttl/cache-length'
 import { correctTtl } from '../ttl/decide-ttl'
 import { decidePing } from './decide-ping'
@@ -19,9 +20,11 @@ const PING_PENDING_MS = 5 * MINUTE_MS
 export async function tick($: EngineInterface) {
   const now = await $.clock.now()
   const usage = await $.session.usage()
+  const before = await readSnapshot($)
+  const ttl = correctTtl(await detectTtl($, usage), before.shortAfterMs)
+  const contextTokens = await refreshShown($, { now, ttl, usage, session: before })
+  // Read again: the switch or a new request may have changed while the cache length was read.
   const session = await readSnapshot($)
-  const ttl = correctTtl(await detectTtl($, usage), session.shortAfterMs)
-  const contextTokens = await refreshShown($, { now, ttl, usage, session })
   if (session.isOn) await keepWarm($, { now, ttl, usage, contextTokens, session })
 }
 
@@ -55,15 +58,31 @@ async function keepWarm($: EngineInterface, { now, ttl, usage, contextTokens, se
     case 'none':
       return
     case 'stop-at-time':
-      await setKeepWarm($, false, 0)
+      await switchOff($)
       $.ui.toast(`Keep-warm stopped at ${clockTime(stopAt)} as asked; the cache will expire normally.`)
       return
     case 'stop-after-max':
-      await setKeepWarm($, false, 0)
+      await switchOff($)
       $.ui.toast(`Keep-warm stopped itself after ${MAX_PINGS} pings in a row; the cache will expire.`)
       return
+    case 'ping':
+      holdWindow(now)
+      await ping($, now, lastRequestAt)
+      return
+    case 'visible-ping':
+      holdWindow(now)
+      await visiblePing($, now)
+      return
+    case 'blocked':
+      // Nothing goes out, but the window is held as after a ping: the room is not checked again.
+      holdWindow(now)
+      return
+    default:
+      step satisfies never
   }
+}
+
+// No second ping while one is under way; a failed one shortens the hold to its retry.
+function holdWindow(now: number) {
   live.pingPendingUntil = now + PING_PENDING_MS
-  if (step === 'ping') await ping($, now, lastRequestAt)
-  else if (step === 'visible-ping') await visiblePing($, now)
 }

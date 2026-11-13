@@ -1,7 +1,6 @@
 // The main conversation's requests and turns: each request restarts the cache's life.
 import type { EngineInterface, ModelUsage } from 'claude-code'
 
-import { isCacheHit } from '../cache-timing'
 import { save } from '../session-store'
 import { appendPing, live, readSnapshot, writeSession } from '../state'
 import { observeGap } from '../ttl/cache-length'
@@ -44,7 +43,7 @@ async function putBack($: EngineInterface, previous: number) {
 }
 
 async function recordVisiblePing($: EngineInterface, turnId: string, usage: ModelUsage) {
-  await appendPing($, { at: live.visiblePingAt, isHit: isCacheHit(usage), read: usage.cache_read_input_tokens })
+  await appendPing($, live.visiblePingAt, usage)
   live.visiblePingAt = 0
   live.pingTurnId = turnId
 }

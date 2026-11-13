@@ -10,7 +10,7 @@ import { readTtlSources } from './read-ttl'
 export async function detectTtl($: EngineInterface, usage: SessionUsage): Promise<KeepWarmTtl> {
   const decision = decideTtl(await readTtlSources($, usage), live)
   if (decision.sawPlanWindows) live.answersWithoutPlan = 0
-  if (decision.isPlan && decision.ttl) return rememberPlan($, decision.ttl)
+  if (decision.isWorthRemembering && decision.ttl) return rememberPlan($, decision.ttl)
   return decision.ttl
 }
 
