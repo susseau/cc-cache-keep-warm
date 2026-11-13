@@ -1,0 +1,58 @@
+{
+  "implementation": {
+    "models": {
+      "claude": {
+        "cheap": {
+          "model": "claude-sonnet-5-5",
+          "effort": "medium"
+        },
+        "standard": {
+          "model": "claude-opus-5-5",
+          "effort": "medium"
+        },
+        "capable": {
+          "model": "claude-fable-5-1",
+          "effort": "medium"
+        }
+      },
+      "codex": {
+        "cheap": "gpt-6-luna",
+        "standard": "gpt-6-sol",
+        "capable": "gpt-6-sol"
+      }
+    }
+  },
+  "review": {
+    "agents": [
+      "claude",
+      "codex"
+    ],
+    "timeout": {
+      "min_minutes": 10,
+      "estimate_factor": 3
+    },
+    "models": {
+      "claude": {
+        "spec": "claude-opus-5-5",
+        "plan": "claude-opus-5-5",
+        "code": "claude-opus-5-5",
+        "code-task": "claude-opus-5-5"
+      },
+      "codex": {
+        "spec": "gpt-6-sol",
+        "plan": "gpt-6-sol",
+        "code": "gpt-6-sol",
+        "code-task": "gpt-6-sol"
+      }
+    }
+  },
+  "rules": {
+    "root": "~/projects/rules"
+  },
+  "planning": {
+    "track": "classic"
+  },
+  "gates": {
+    "check": "claude plugin validate --strict . && claude plugin validate --strict ./.claude-plugin/plugin.json"
+  }
+}

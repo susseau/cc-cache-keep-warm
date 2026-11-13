@@ -1,3 +1,23 @@
 # Typings Claude Code writes beside a mod it loads from a folder you own
 .claude-plugin/types/
 tsconfig.json
+
+# aby — worktree i artefakty runtime (.aby/settings.json jest śledzony)
+.worktrees/
+.aby/reviews/
+.aby/implementation/
+.aby/settings.local.json
+.aby/herdr-panel/
+.aby/sessions/
+.aby/task/
+.aby/hooks/
+*.gate.lock*
+
+# beads (serwer Dolt) i lokalne narzędzia
+.beads/
+.dolt/
+*.db
+.beads-credential-key
+.perles/
+graphify-out/
+.claude/settings.local.json
