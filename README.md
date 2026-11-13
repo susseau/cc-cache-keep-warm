@@ -127,7 +127,7 @@ flowchart LR
 ```
 
 - **It never wakes a cold cache.** The ping goes out 8 minutes before the cache would expire. If the cache has already expired, keep-warm waits for your next message instead of paying to rebuild it.
-- **Nothing is added to your conversation.** The ping sends your conversation once more, outside the chat, with a one-line question, and throws the answer away. One exception: after the app restarts, Claude Code can repeat a conversation only once it has answered again. So in a session you haven't touched since the restart, the first ping is a short message in the chat, which Claude answers with "ok". The line says so in advance: "next ping 14:07 (shows in chat)".
+- **Nothing is added to your conversation.** The ping sends your conversation once more, outside the chat, with a one-line question, and throws the answer away. One exception: after the app restarts, Claude Code can repeat a conversation only once it has answered again. So in a session you haven't touched since the restart, the first ping is a short message in the chat, which Claude answers with "ok". The line says so in advance: "󰁔 ping 14:07 (shows in chat)".
 - **It works while Claude is waiting for you**, for example on a question it asked you or a permission prompt.
 - **It is light.** The line itself never calls the model: one quick local check every 15 seconds, redrawn at most once a minute. The only thing that uses your plan or credits is the ping, about once every 52 minutes, in sessions where keep-warm is on.
 

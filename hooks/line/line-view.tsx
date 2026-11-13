@@ -13,6 +13,8 @@ const PART_GAP = 1
 const START_LABEL = '󰐊 Warm'
 const STOP_LABEL = '󰓛 Stop'
 const BUTTON_WIDTH = 10
+// On top of the gap: the button stands a little apart from the bar (owner's choice).
+const BUTTON_MARGIN = 1
 // The aby panel's hues: its green and amber; grey is the dim default.
 const TONE_COLORS: Record<LineTone, string | undefined> = { green: '#5fd700', amber: '#d7af00', grey: undefined }
 
@@ -36,7 +38,7 @@ export function drawLine({ Box, Button, Text }: LineComponents, model: LineModel
         {color ? <Text color={color}>{BAR_FULL.repeat(model.filledCells)}</Text> : <Text dimColor>{BAR_FULL.repeat(model.filledCells)}</Text>}
         <Text dimColor>{BAR_EMPTY.repeat(BAR_CELLS - model.filledCells)}</Text>
       </Box>
-      <Box flexShrink={0} width={BUTTON_WIDTH} marginLeft={1}>
+      <Box flexShrink={0} width={BUTTON_WIDTH} marginLeft={BUTTON_MARGIN}>
         {model.canToggle
           ? <Button key="toggle" label={model.isOn ? STOP_LABEL : START_LABEL} onPress={onToggle} />
           : <Button key="toggle" label={START_LABEL} dimColor onPress={() => {}} />}

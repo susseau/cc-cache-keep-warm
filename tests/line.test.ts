@@ -2,7 +2,7 @@
 // Run (from the repo root): claude plugin test
 import { expect, test } from 'claude-code/testing'
 
-import { answer, line, MINUTE, start, stubEngine, WRITE } from './engine'
+import { answer, line, MINUTE, pressToggle, start, stubEngine, WRITE } from './engine'
 
 test('before any answer: nothing cached yet', async ($, on) => {
   stubEngine(on)
@@ -45,6 +45,8 @@ test('an API key: a 5-minute cache, the button dim', async ($, on) => {
   await answer($, engine, WRITE)
   await clock.advance(MINUTE)
   expect(await line($)).toEqual('5-minute cache (API key)·keep-warm needs the 1-hour cache·after 10:05 your next message re-writes 54k·4 min left▰▰▰▰▰▰▰▰▱▱󰐊 Warm')
+  await pressToggle($)
+  expect(await line($)).toEndWith('󰐊 Warm')
 })
 
 test('over the plan limit: a 5-minute cache, keep-warm paused', async ($, on) => {

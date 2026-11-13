@@ -130,6 +130,11 @@ export async function line($: any, surface = 'terminal') {
   return (await ui.find({ type: 'Box' }))?.text ?? ''
 }
 
+export async function pressToggle($: any) {
+  const ui = await $.ui.mount({ plugin: 'cache-keep-warm', viewport: { columns: 200, rows: 5 }, surface: 'terminal', component: 'AbovePrompt', props: {} })
+  await ui.press({ key: 'toggle' })
+}
+
 export async function keepwarm($: any, args: string) {
   const r = await $.command.run({ command: 'keepwarm', args })
   return r.text as string
