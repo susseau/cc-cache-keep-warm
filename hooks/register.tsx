@@ -47,7 +47,10 @@ const DETAIL_GAP = 2
 // The circle in front empties with the cache's life, a quarter at a time; hollow once cold.
 // The full one is the "medium black circle" in text style: the plain ● is drawn smaller than
 // the quarter circles in the desktop app's font (picked by the user from a test row).
+// The terminal gets the plain ●: the engine counts ⚫︎ as 2 columns, terminals draw it in 1,
+// so the rest of the line shifts and characters from the previous frame stay on screen.
 const CIRCLE_BY_QUARTER = ['◔', '◑', '◕', '⚫︎']
+const CIRCLE_BY_QUARTER_TERMINAL = ['◔', '◑', '◕', '●']
 const CIRCLE_COLD = '○'
 // While keep-warm is on, the session's title in the app's list starts with this mark. The app
 // asks before changing a title you typed yourself; titles it generated change without asking.
@@ -682,9 +685,10 @@ export const register: Register = (on, options) => {
     const remaining = expiresAt - t
     const isWarm = last > 0 && remaining > 0
     const filled = isWarm ? Math.max(1, Math.ceil((remaining / ttlMs) * BAR_CELLS)) : 0
-    const quarters = CIRCLE_BY_QUARTER.length
+    const circles = e.surface === 'terminal' ? CIRCLE_BY_QUARTER_TERMINAL : CIRCLE_BY_QUARTER
+    const quarters = circles.length
     const circle = isWarm
-      ? CIRCLE_BY_QUARTER[Math.min(quarters, Math.max(1, Math.ceil((remaining / ttlMs) * quarters))) - 1]
+      ? circles[Math.min(quarters, Math.max(1, Math.ceil((remaining / ttlMs) * quarters))) - 1]
       : CIRCLE_COLD
 
     // The first part (time left) is drawn bold; the dot and the button already say whether
