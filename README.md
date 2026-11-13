@@ -59,7 +59,7 @@ Install the Cache Keep-Warm mod from https://github.com/andreichiritescu/claude-
 1. Run: claude plugin marketplace add https://github.com/andreichiritescu/claude-code-cache-keep-warm.git
 2. Run: claude plugin install cache-keep-warm@cache-keep-warm
 3. If a step fails because my Claude Code is too old, tell me to update it (the mod needs Claude Code 2.1.287 or newer, or the desktop app with 2.1.286 or newer) and stop.
-4. When it is installed, tell me to run /reload-plugins so this session loads it, and that I can turn keep-warm on with the Keep warm button on the new line above the prompt, or with /keepwarm on.
+4. When it is installed, tell me to run /reload-plugins so this session loads it, and that I can turn keep-warm on with the Warm button on the new line above the prompt, or with /keepwarm on.
 ```
 
 ### Or with one command in a session
@@ -85,26 +85,28 @@ Then start a new session, or run `/reload-plugins` in an open one. The line appe
 
 ## Use it
 
-Click **Keep warm** on the line, or type a command:
+Click **󰐊 Warm** on the line, or type a command:
 
 | Command | What it does |
 | --- | --- |
 | `/keepwarm on` | Keep this session warm |
 | `/keepwarm 3h` | Keep it warm for 3 hours |
 | `/keepwarm until 18:00` | Keep it warm until 18:00 |
-| `/keepwarm off` | Stop (or click **Stop**) |
+| `/keepwarm off` | Stop (or click **󰓛 Stop**) |
 | `/keepwarm` | Show the state and the last pings |
 
 Keep-warm is **off by default** and you switch it **per session**: only the sessions you want are kept warm. To have it on in every new session, turn on the **On in new sessions** setting. It stops by itself after about 7 hours (8 pings in a row, the **Pings in a row** setting) unless you gave it a time: each ping costs about a twentieth of what one re-write does, and the longer the break, the less likely it ends soon.
 
 ### Reading the line
 
+The line sits on the right, above the prompt. Its icons come from a [Nerd Font](https://www.nerdfonts.com/); without one they show as boxes.
+
 | You see | It means |
 | --- | --- |
-| **◕** and **▰▰▰▰▰▰▰▱▱▱** | How much of the cache's life is left. **Green** while keep-warm is on, grey when it is off, and **○** once the cache has expired. |
+| **40 min left ▰▰▰▰▰▰▰▱▱▱** | How much of the cache's life is left. The bar is **green** while keep-warm is on and able to ping, **amber** while it is on but cannot ping (paused, failed, waiting), grey when it is off. Empty once the cache has expired (**cold since 14:12**). |
 | **nothing cached yet** | A new conversation, or one you just cleared or compacted: nothing of it is cached until your next message, and the countdown starts with that. |
-| **40 min left (14:12)** | Time left, and the clock time the cache expires if nothing happens. |
-| **next ping 14:07** | When keep-warm will read the cache next. **(shows in chat)** means this ping is a short visible message, because the session hasn't answered since the app restarted. |
+| **󰔟 expires 14:12** | The clock time the cache expires if nothing happens. Not shown while keep-warm is holding the cache: the next ping matters then. |
+| **󰁔 ping 14:07** | When keep-warm will read the cache next. **(shows in chat)** means this ping is a short visible message, because the session hasn't answered since the app restarted. |
 | **3 pings ✓** | Pings so far, and whether the last one found the cache warm (✓) or cold (✗). |
 | **conversation nearly full: keep-warm waits for you** | After a restart the next ping has to be the visible one, and Claude Code re-sends your project's instruction files (`CLAUDE.md`, the files it imports, `MEMORY.md`) with it. Here those would not fit next to the conversation: the ping would fail or make Claude Code compact the conversation. So keep-warm waits for your own next message. |
 | **ping failed: …** | The last ping never reached the model, with the reason Claude Code gave. "Prompt is too long" means the conversation is over the model's limit: run `/compact` in that session. The cache then expires normally. |
@@ -125,7 +127,7 @@ flowchart LR
 ```
 
 - **It never wakes a cold cache.** The ping goes out 8 minutes before the cache would expire. If the cache has already expired, keep-warm waits for your next message instead of paying to rebuild it.
-- **Nothing is added to your conversation.** The ping sends your conversation once more, outside the chat, with a one-line question, and throws the answer away. One exception: after the app restarts, Claude Code can repeat a conversation only once it has answered again. So in a session you haven't touched since the restart, the first ping is a short message in the chat, which Claude answers with "ok". The line says so in advance: "next ping 14:07 (shows in chat)".
+- **Nothing is added to your conversation.** The ping sends your conversation once more, outside the chat, with a one-line question, and throws the answer away. One exception: after the app restarts, Claude Code can repeat a conversation only once it has answered again. So in a session you haven't touched since the restart, the first ping is a short message in the chat, which Claude answers with "ok". The line says so in advance: "󰁔 ping 14:07 (shows in chat)".
 - **It works while Claude is waiting for you**, for example on a question it asked you or a permission prompt.
 - **It is light.** The line itself never calls the model: one quick local check every 15 seconds, redrawn at most once a minute. The only thing that uses your plan or credits is the ping, about once every 52 minutes, in sessions where keep-warm is on.
 

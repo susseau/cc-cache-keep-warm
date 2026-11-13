@@ -82,6 +82,6 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const session = await readSnapshot($)
-    return drawLine($.ui.resolve(e), lineModel(session, e.surface), () => (session.isOn ? switchOff($) : switchOn($, 0)))
+    return drawLine($.ui.resolve(e), lineModel(session), () => (session.isOn ? switchOff($) : switchOn($, 0)))
   })
 }

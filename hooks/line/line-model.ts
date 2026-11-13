@@ -3,33 +3,28 @@ import { HOUR_MS, isLongEnoughToKeepWarm, MINUTE_MS, PING_LEAD_MS } from '../cac
 import { cacheLength, clockTime, minutes, timeLeft, tokens } from '../format'
 import { needsVisiblePing, type SessionSnapshot } from '../session-snapshot'
 
-// Blocks that empty over the cache's life: filled blocks green while keep-warm is on (grey
-// otherwise), outlined blocks for the time already gone.
+// Blocks that empty over the cache's life, the one gauge of the time left: filled blocks in the
+// line's tone, outlined blocks for the time already gone.
 export const BAR_CELLS = 10
-// The circle in front empties with the cache's life, a quarter at a time; hollow once cold.
-// The full one is the "medium black circle" in text style: the plain ● is drawn smaller than
-// the quarter circles in the desktop app's font (picked by the user from a test row).
-// The terminal gets the plain ●: the engine counts ⚫︎ as 2 columns, terminals draw it in 1,
-// so the rest of the line shifts and characters from the previous frame stay on screen.
-const CIRCLE_BY_QUARTER = ['◔', '◑', '◕', '⚫︎']
-const CIRCLE_BY_QUARTER_TERMINAL = ['◔', '◑', '◕', '●']
-const CIRCLE_COLD = '○'
+// Nerd Font icons, as in the aby panel: the next ping and the clock time the cache expires.
+const NEXT_ICON = '󰁔'
+const EXPIRES_ICON = '󰔟'
 // With keep-warm off, the band names what is at stake once this little time is left.
 const EXPIRING_MS = 10 * MINUTE_MS
 const WAITS_TEXT = 'keep-warm starts after your next message'
 const SHOWS_IN_CHAT = ' (shows in chat)'
 const NEARLY_FULL_TEXT = 'conversation nearly full: keep-warm waits for you'
 
+// green: keep-warm is on and able to ping; amber: it is on but cannot ping (paused, failed,
+// waiting for room); grey: it is off.
+export type LineTone = 'green' | 'amber' | 'grey'
+
 export type LineModel = {
-  circle: string
   filledCells: number
-  // Green only while keep-warm is on and able to ping; everything else stays default grey.
-  isGreen: boolean
-  // The first part (time left) is drawn bold; the dot and the button already say whether
-  // keep-warm is on, so the text no longer repeats it.
+  tone: LineTone
+  // The time left, drawn bold after the bar; the bar's colour and the button already say whether
+  // keep-warm is on, so the text does not repeat it.
   main: string
-  // "58 min left (14:12)": the clock time the cache expires, right after the time left.
-  expiresText: string
   details: string[]
   // No toggle where keep-warm can never ping (an API key, or a short cache set on purpose).
   canToggle: boolean
@@ -39,18 +34,16 @@ export type LineModel = {
 // The countdown as the line sees it: the latest of the last tick and the last request.
 type Countdown = { ttlMs: number, expiresAt: number, remaining: number, isWarm: boolean }
 
-export function lineModel(session: SessionSnapshot, surface: string): LineModel {
+export function lineModel(session: SessionSnapshot): LineModel {
   const { lastRequestAt, ttl, isOn } = session
   const countdown = countdownOf(session)
   const canKeepWarm = isLongEnoughToKeepWarm(ttl)
   const isGreen = isOn && canKeepWarm && !session.pingError && !isBlocked(session)
   return {
-    circle: circleOf(countdown, surface),
     filledCells: countdown.isWarm ? Math.max(1, Math.ceil((countdown.remaining / countdown.ttlMs) * BAR_CELLS)) : 0,
-    isGreen,
+    tone: isGreen ? 'green' : isOn ? 'amber' : 'grey',
     main: lastRequestAt === 0 ? 'nothing cached yet' : countdown.isWarm ? timeLeft(countdown.remaining) : `cold since ${clockTime(countdown.expiresAt)}`,
-    expiresText: countdown.isWarm ? ` (${clockTime(countdown.expiresAt)})` : '',
-    details: [...waitingDetails(session, countdown), ...keepWarmDetails(session, countdown), ...cachedDetails(session, countdown, isGreen)],
+    details: [...waitingDetails(session, countdown), ...expiryDetails(session, countdown, isGreen), ...keepWarmDetails(session, countdown), ...cachedDetails(session, countdown, isGreen)],
     canToggle: isOn || !ttl || canKeepWarm || ttl.reason === 'overage' || ttl.reason === 'observed',
     isOn,
   }
@@ -68,11 +61,11 @@ function isBlocked(session: SessionSnapshot) {
   return needsVisiblePing(session) && session.nearlyFull
 }
 
-function circleOf({ isWarm, remaining, ttlMs }: Countdown, surface: string) {
-  if (!isWarm) return CIRCLE_COLD
-  const circles = surface === 'terminal' ? CIRCLE_BY_QUARTER_TERMINAL : CIRCLE_BY_QUARTER
-  const quarter = Math.min(circles.length, Math.max(1, Math.ceil((remaining / ttlMs) * circles.length)))
-  return circles[quarter - 1] ?? CIRCLE_COLD
+// While keep-warm holds the cache the next ping matters, not the expiry; near the end the
+// re-write warning names the time itself.
+function expiryDetails({ contextTokens }: SessionSnapshot, { isWarm, remaining, expiresAt }: Countdown, isGreen: boolean) {
+  if (isGreen || !isWarm || (contextTokens > 0 && remaining < EXPIRING_MS)) return []
+  return [`${EXPIRES_ICON} expires ${clockTime(expiresAt)}`]
 }
 
 function waitingDetails({ isWaiting }: SessionSnapshot, { isWarm }: Countdown) {
@@ -102,7 +95,7 @@ function nextPingDetails(session: SessionSnapshot, { isWarm, ttlMs }: Countdown)
   if (isBlocked(session)) return [NEARLY_FULL_TEXT]
   if (!isWarm) return []
   const nextPingAt = clockTime(session.lastRequestAt + ttlMs - PING_LEAD_MS)
-  return [`next ping ${nextPingAt}${needsVisiblePing(session) ? SHOWS_IN_CHAT : ''}`]
+  return [`${NEXT_ICON} ping ${nextPingAt}${needsVisiblePing(session) ? SHOWS_IN_CHAT : ''}`]
 }
 
 function pingCountDetails({ pings }: SessionSnapshot) {
