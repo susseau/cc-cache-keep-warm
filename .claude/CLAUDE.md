@@ -6,11 +6,11 @@ A Claude Code mod (a plugin of function hooks). The code is in `hooks/` (below),
 
 `hooks/hooks.json` loads `hooks/register.tsx`, which only wires the events to the modules that own them. The decisions sit in pure modules (no `$`, no state module): `decide-ttl.ts`, `decide-ping.ts`, `line-model.ts`, `session-snapshot.ts`, `format.ts`, `cache-timing.ts`; `command.ts` keeps its pure `parseStop` / `statusText` next to the handler:
 
-- `register.tsx`: the `on(...)` hooks and the two userConfig options; only which event goes where.
+- `register.tsx`: the `on(...)` hooks and the three userConfig options; only which event goes where.
 - `state.ts`: every `$.state` ref (private), `live` (module variables), `readSnapshot` / `writeSession`, `appendPing`.
 - `session-snapshot.ts`: the `SessionSnapshot` type and `needsVisiblePing` (pure).
 - `session-store.ts`: `$.store`: save, restore after a relaunch, the weekly clean-up, `plan-ttl`.
-- `cache-timing.ts`: the shared lengths and limits (ping lead, 20 pings, 30-min minimum), `isCacheHit`.
+- `cache-timing.ts`: the shared lengths and limits (ping lead, the pings-in-a-row limit, 30-min minimum), `isCacheHit`, `pingLimit`.
 - `format.ts`: minutes, clock time, token counts.
 - `ttl/`: the cache length. `read-ttl.ts` reads env, settings and plan windows; `decide-ttl.ts` decides (pure); `cache-length.ts` ties them to the session and records a cache seen going cold early.
 - `ping/`: `schedule.ts` is the 15-s tick; `decide-ping.ts` decides when and which ping (pure); `ping.ts` sends it (fork, or the visible fallback) and checks the room for it.
@@ -30,7 +30,7 @@ These notes live in `.claude/` on purpose: a `CLAUDE.md` at the plugin root make
 
 ## Checking a change
 
-- `claude plugin test .` runs `tests/`: `keep-warm.test.ts` and `line.test.ts` drive the mod through a stub engine (`tests/engine.ts`), `decisions.test.ts` covers the pure functions. The kit stops a test after 5 s: "stops itself after 20 pings" runs ~4400 ticks and only fits on an idle machine. The kit cannot pass plugin options, so `default_on` has no test.
+- `claude plugin test .` runs `tests/`: `keep-warm.test.ts` and `line.test.ts` drive the mod through a stub engine (`tests/engine.ts`), `decisions.test.ts` covers the pure functions. The kit stops a test after 5 s: "stops itself after 8 pings" runs ~1900 ticks (~3 s). The kit cannot pass plugin options, so `default_on` and `max_pings` are tested only through the pure functions (`pingLimit`, `decidePing`, `statusText`).
 - `claude plugin validate --strict .` checks the marketplace; `claude plugin validate --strict ./.claude-plugin/plugin.json` checks the plugin and the hooks module. The `hooks:` and `calls:` lines list everything the module does.
 - The mod API is declared in `.claude-plugin/types/claude-code/index.d.ts`, which Claude Code writes when it loads the mod (gitignored). Grep it for an event or a `$` method. The built-in `plugin-authoring` skill explains the API.
 - To test the public install from scratch, point `CLAUDE_CONFIG_DIR` at a fresh, SHORT temp folder (a long path fails with "Filename too long"), unset `CLAUDE_CODE_PLUGIN_DIRS`, then run the README's terminal commands. Install instructions use the full HTTPS address: the `owner/repo` form makes Claude Code try SSH first.
@@ -64,8 +64,8 @@ These notes live in `.claude/` on purpose: a `CLAUDE.md` at the plugin root make
 
 ## Behaviour agreed with the owner
 
-- Never ping a cold cache, visible or not. Ping 8 min before expiry (52 min into the 1-hour cache, since 1.0.9: Claude Code's idle compaction compacts a conversation of 200k+ tokens, or `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS`, at 90% of the hour = 54 min unless `"idleCompaction": false`; it skips only after a newer main-thread request, so whether the fork ping stops it is unverified), retry every 30 s on failure, stop after 20 pings in a row unless a stop time was given. Keep-warm only for a cache of 30 min or more.
-- "In a row" means no real turn in between: any main-conversation turn with usage, the user's or one the session runs by itself (an agent's report, another session's message), starts the count over; the mod's own pings never do (owner's ruling 2026-10-08). The visible ping's turn is known by the `turnId` its `turn.step` carried (`turn.complete` has the same one); the invisible ping is no turn at all. Before 1.0.8 only switching keep-warm, `/clear` or a compaction restarted the count, so a session in daily use stopped after 20 pings in total.
+- Never ping a cold cache, visible or not. Ping 8 min before expiry (52 min into the 1-hour cache, since 1.0.9: Claude Code's idle compaction compacts a conversation of 200k+ tokens, or `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS`, at 90% of the hour = 54 min unless `"idleCompaction": false`; it skips only after a newer main-thread request, so whether the fork ping stops it is unverified), retry every 30 s on failure, stop after 8 pings in a row (~7 h) unless a stop time was given; `max_pings` ("Pings in a row", 1 to 20, since 1.0.14) changes it. 20 is the break-even even for a sure return: a ping reads the cache at 0.1x, re-writing a 1-hour cache costs 2x (owner's ruling 2026-11-13, was 20). Keep-warm only for a cache of 30 min or more.
+- "In a row" means no real turn in between: any main-conversation turn with usage, the user's or one the session runs by itself (an agent's report, another session's message), starts the count over; the mod's own pings never do (owner's ruling 2026-10-08). The visible ping's turn is known by the `turnId` its `turn.step` carried (`turn.complete` has the same one); the invisible ping is no turn at all. Before 1.0.8 only switching keep-warm, `/clear` or a compaction restarted the count, so a session in daily use stopped after 20 pings (the limit then) in total.
 - Keep it light: one local check every 15 s, the line redrawn at most once a minute, no model call except the ping.
 - The line: circle `⚫ ◕ ◑ ◔ ○`, 10 blocks `▰ ▱`, "N min left (HH:MM)" in bold, dim details separated by `·`. Green only while keep-warm is on and able to ping; everything else default grey.
 - The cache length is detected (settings, then plan) and corrected by what the cache actually does.

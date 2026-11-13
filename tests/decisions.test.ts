@@ -1,6 +1,7 @@
 // The pure decisions, without an engine: cache length, when to ping, /keepwarm and the line.
 import { expect, test } from 'claude-code/testing'
 
+import { DEFAULT_MAX_PINGS, pingLimit } from '../hooks/cache-timing'
 import { parseStop, statusText } from '../hooks/command'
 import { lineModel } from '../hooks/line/line-model'
 import { decidePing, isTooFullForVisiblePing, type PingCheck } from '../hooks/ping/decide-ping'
@@ -60,7 +61,7 @@ test('shortAfterGap: only a re-write after a gap the cache should have outlived 
 })
 
 const check = (fields: Partial<PingCheck> = {}): PingCheck => ({
-  now: START + 52 * MINUTE, ttl: SUBSCRIPTION_TTL, lastRequestAt: START, stopAt: 0, pendingUntil: 0, pingsInRow: 0, needsVisible: false, nearlyFull: false, ...fields,
+  now: START + 52 * MINUTE, ttl: SUBSCRIPTION_TTL, lastRequestAt: START, stopAt: 0, pendingUntil: 0, pingsInRow: 0, maxPings: DEFAULT_MAX_PINGS, needsVisible: false, nearlyFull: false, ...fields,
 })
 
 test('decidePing: only between 52 and 59 min, never on a cold cache', async () => {
@@ -74,10 +75,21 @@ test('decidePing: only between 52 and 59 min, never on a cold cache', async () =
 
 test('decidePing: the stops, and the visible ping', async () => {
   expect(decidePing(check({ stopAt: START + 30 * MINUTE }))).toEqual('stop-at-time')
-  expect(decidePing(check({ pingsInRow: 20 }))).toEqual('stop-after-max')
-  expect(decidePing(check({ pingsInRow: 20, stopAt: START + 3 * HOUR }))).toEqual('ping')
+  expect(decidePing(check({ pingsInRow: 7 }))).toEqual('ping')
+  expect(decidePing(check({ pingsInRow: 8 }))).toEqual('stop-after-max')
+  expect(decidePing(check({ pingsInRow: 8, maxPings: 12 }))).toEqual('ping')
+  expect(decidePing(check({ pingsInRow: 8, stopAt: START + 3 * HOUR }))).toEqual('ping')
   expect(decidePing(check({ needsVisible: true }))).toEqual('visible-ping')
   expect(decidePing(check({ needsVisible: true, nearlyFull: true }))).toEqual('blocked')
+})
+
+test('pingLimit: the max_pings option, 1 to 20, else 8', async () => {
+  expect(pingLimit(undefined)).toEqual(8)
+  expect(pingLimit(12)).toEqual(12)
+  expect(pingLimit(3.7)).toEqual(3)
+  expect(pingLimit(50)).toEqual(20)
+  expect(pingLimit(0)).toEqual(8)
+  expect(pingLimit('12')).toEqual(8)
 })
 
 test('isTooFullForVisiblePing: free room against the instruction files plus 30k', async () => {
@@ -104,8 +116,9 @@ const snapshot = (fields: Partial<SessionSnapshot> = {}): SessionSnapshot => ({
 
 test('statusText: on, its ping history and a short cache', async () => {
   const on = snapshot({ isOn: true, pings: [{ at: START, isHit: true, read: 54_000 }, { at: START + HOUR, isHit: false, read: 0 }] })
-  expect(statusText(on).split('\n').slice(-2)).toEqual(['10:00 · read 54k from cache', '11:00 · found the cache cold'])
-  expect(statusText(snapshot({ ttl: API_TTL })).split('\n')).toContain('Keep-warm only pings a cache of 30 min or longer.')
+  expect(statusText(on, 8).split('\n')[0]).toContain('(stops itself after 8 pings in a row)')
+  expect(statusText(on, 8).split('\n').slice(-2)).toEqual(['10:00 · read 54k from cache', '11:00 · found the cache cold'])
+  expect(statusText(snapshot({ ttl: API_TTL }), 8).split('\n')).toContain('Keep-warm only pings a cache of 30 min or longer.')
 })
 
 test('lineModel: green only while on and able to ping', async () => {

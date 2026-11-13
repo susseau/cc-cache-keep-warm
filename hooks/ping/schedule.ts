@@ -2,7 +2,7 @@
 import type { EngineInterface, SessionUsage } from 'claude-code'
 
 import type { KeepWarmTtl } from '../../types'
-import { MAX_PINGS, MINUTE_MS } from '../cache-timing'
+import { MINUTE_MS } from '../cache-timing'
 import { clockTime } from '../format'
 import { switchOff } from '../keep-warm-switch'
 import { needsVisiblePing, type SessionSnapshot } from '../session-snapshot'
@@ -52,7 +52,7 @@ async function keepWarm($: EngineInterface, { now, ttl, usage, contextTokens, se
   let { nearlyFull } = session
   if (needsVisible && !live.roomChecked) nearlyFull = await checkRoom($, usage.context.window, contextTokens)
   const { lastRequestAt, stopAt, pings } = session
-  const step = decidePing({ now, ttl, lastRequestAt, stopAt, pendingUntil: live.pingPendingUntil, pingsInRow: pings.length, needsVisible, nearlyFull })
+  const step = decidePing({ now, ttl, lastRequestAt, stopAt, pendingUntil: live.pingPendingUntil, pingsInRow: pings.length, maxPings: live.maxPings, needsVisible, nearlyFull })
 
   switch (step) {
     case 'none':
@@ -63,7 +63,7 @@ async function keepWarm($: EngineInterface, { now, ttl, usage, contextTokens, se
       return
     case 'stop-after-max':
       await switchOff($)
-      $.ui.toast(`Keep-warm stopped itself after ${MAX_PINGS} pings in a row; the cache will expire.`)
+      $.ui.toast(`Keep-warm stopped itself after ${live.maxPings} pings in a row; the cache will expire.`)
       return
     case 'ping':
       holdWindow(now)

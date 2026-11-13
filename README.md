@@ -95,7 +95,7 @@ Click **Keep warm** on the line, or type a command:
 | `/keepwarm off` | Stop (or click **Stop**) |
 | `/keepwarm` | Show the state and the last pings |
 
-Keep-warm is **off by default** and you switch it **per session**: only the sessions you want are kept warm. To have it on in every new session, turn on the **On in new sessions** setting. It stops by itself after about 17 hours (20 pings in a row) unless you gave it a time, because past that point one re-write is cheaper than more pings.
+Keep-warm is **off by default** and you switch it **per session**: only the sessions you want are kept warm. To have it on in every new session, turn on the **On in new sessions** setting. It stops by itself after about 7 hours (8 pings in a row, the **Pings in a row** setting) unless you gave it a time: each ping costs a tenth of what one re-write does, and the longer the break, the less likely it ends soon.
 
 ### Reading the line
 
@@ -153,6 +153,7 @@ Keep-warm only pings a cache that lasts **30 minutes or more**: on the five-minu
 | --- | --- | --- |
 | Mark the session title | On | While keep-warm is on, put 🟢 in front of the session's title in the desktop app's session list |
 | On in new sessions | Off | Turn keep-warm on in every new session, as if you ran `/keepwarm on`. A session you reopen keeps its own switch, so one you switched off stays off |
+| Pings in a row | 8 | Without a stop time, keep-warm stops itself after this many pings in a row, one about every 52 minutes (1 to 20; 8 is about 7 hours). Any real turn in the conversation starts the count over |
 
 Change them in `/config`, or with `/plugin configure cache-keep-warm@cache-keep-warm`.
 
@@ -169,7 +170,7 @@ In the desktop app, renaming a title **you typed yourself** asks for your approv
 Your cache lasts five minutes by default, so keep-warm does not ping. If you take longer breaks, set `promptCacheTtl` to `"1h"` in your Claude Code settings: the cache then lasts an hour and keep-warm works. One-hour cache writes cost more than five-minute ones, so this pays off only if you do take breaks.
 
 **Will it ping forever if I forget it?**
-No. It stops by itself after 20 pings in a row (about 17 hours), or at the time you gave it with `/keepwarm 3h` or `/keepwarm until 18:00`.
+No. It stops by itself after 8 pings in a row (about 7 hours; the **Pings in a row** setting goes up to 20), or at the time you gave it with `/keepwarm 3h` or `/keepwarm until 18:00`.
 
 **Does it work in VS Code?**
 The keep-warm pings work there, but the line is only drawn in the terminal and in the desktop app's Code tab.
