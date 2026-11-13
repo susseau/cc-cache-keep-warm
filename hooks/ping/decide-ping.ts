@@ -1,6 +1,6 @@
 // When to ping and how: pure decisions over what schedule.ts and ping.ts read.
 import type { KeepWarmTtl } from '../../types'
-import { isLongEnoughToKeepWarm, MAX_PINGS, PING_LEAD_MS, PING_MARGIN_MS } from '../cache-timing'
+import { isLongEnoughToKeepWarm, PING_LEAD_MS, PING_MARGIN_MS } from '../cache-timing'
 
 // The visible ping is a real turn, and after a restart Claude Code re-sends the project's
 // instruction files (CLAUDE.md, the files it imports, MEMORY.md) with it: 130k tokens in a big
@@ -37,6 +37,7 @@ export type PingCheck = {
   stopAt: number
   pendingUntil: number
   pingsInRow: number
+  maxPings: number
   needsVisible: boolean
   nearlyFull: boolean
 }
@@ -48,7 +49,7 @@ export type PingStep = 'none' | 'stop-at-time' | 'stop-after-max' | 'ping' | 'vi
 export function decidePing(check: PingCheck): PingStep {
   if (check.stopAt > 0 && check.now >= check.stopAt) return 'stop-at-time'
   if (!isInPingWindow(check) || check.now < check.pendingUntil) return 'none'
-  if (check.stopAt === 0 && check.pingsInRow >= MAX_PINGS) return 'stop-after-max'
+  if (check.stopAt === 0 && check.pingsInRow >= check.maxPings) return 'stop-after-max'
   if (!check.needsVisible) return 'ping'
   return check.nearlyFull ? 'blocked' : 'visible-ping'
 }

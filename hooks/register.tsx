@@ -2,6 +2,7 @@
 // that owns it.
 import type { Register } from 'claude-code'
 
+import { pingLimit } from './cache-timing'
 import { COMMAND, runKeepwarm } from './command'
 import { carryOnResumed, markStartedNew, replacesConversation, startOver, startSession } from './events/session'
 import { finishRequest, finishTurn, startRequest } from './events/turn'
@@ -10,13 +11,16 @@ import { lineModel } from './line/line-model'
 import { drawLine } from './line/line-view'
 import { live, readSnapshot, writeSession } from './state'
 
-// The userConfig keys in plugin.json: the title mark, and keep-warm on in every new session.
+// The userConfig keys in plugin.json: the title mark, keep-warm on in every new session, and how
+// many pings in a row before keep-warm stops itself.
 const TITLE_MARK_OPTION = 'title_mark'
 const DEFAULT_ON_OPTION = 'default_on'
+const MAX_PINGS_OPTION = 'max_pings'
 
 export const register: Register = (on, options) => {
   live.titleMark = options[TITLE_MARK_OPTION] !== false
   live.defaultOn = options[DEFAULT_ON_OPTION] === true
+  live.maxPings = pingLimit(options[MAX_PINGS_OPTION])
 
   on('session.start', async ($, e, next) => {
     await startSession($)

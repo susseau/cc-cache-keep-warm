@@ -1,7 +1,7 @@
 import type { EngineInterface, ModelUsage } from 'claude-code'
 
 import type { KeepWarmPing, KeepWarmTtl } from '../types'
-import { isCacheHit, MAX_PINGS } from './cache-timing'
+import { DEFAULT_MAX_PINGS, isCacheHit, MAX_PINGS_CAP } from './cache-timing'
 import type { SessionSnapshot } from './session-snapshot'
 
 // Per-session values in $.state: they survive a reload of the module, not an app relaunch (the
@@ -24,7 +24,8 @@ const NEARLY_FULL = { plugin: 'cache-keep-warm', key: 'nearlyFull' } as const
 
 // The module's own variables start over on a reload; what must survive one is in $.state.
 // `titleMark` is the user's "Mark the session title" setting; changing it in /config reloads
-// the module, so it is read once in register(), like `defaultOn` ("On in new sessions").
+// the module, so it is read once in register(), like `defaultOn` ("On in new sessions") and
+// `maxPings` ("Pings in a row").
 // `isUnseen`: the store had nothing for this session at start; `startedNew`: Claude Code started
 // it as a new session (not reopened). `planTtl` mirrors the shared plan-ttl store entry;
 // `savedTtl` is the length this session's own cache had when the store last saw it.
@@ -39,6 +40,7 @@ export const live: {
   shownKey: string
   titleMark: boolean
   defaultOn: boolean
+  maxPings: number
   isUnseen: boolean
   startedNew: boolean
   planTtl: KeepWarmTtl | undefined
@@ -54,6 +56,7 @@ export const live: {
   shownKey: '',
   titleMark: true,
   defaultOn: false,
+  maxPings: DEFAULT_MAX_PINGS,
   isUnseen: false,
   startedNew: false,
   planTtl: undefined,
@@ -118,5 +121,5 @@ export async function markRestored($: EngineInterface) {
 export async function appendPing($: EngineInterface, at: number, usage: ModelUsage) {
   const ping: KeepWarmPing = { at, isHit: isCacheHit(usage), read: usage.cache_read_input_tokens }
   const { value: pings = [] } = await $.state.get(PINGS)
-  await $.state.set(PINGS, [...pings, ping].slice(-MAX_PINGS))
+  await $.state.set(PINGS, [...pings, ping].slice(-MAX_PINGS_CAP))
 }

@@ -1,11 +1,11 @@
 // /keepwarm: on [3h | until 18:00], off, or status.
 import type { EngineInterface } from 'claude-code'
 
-import { HOUR_MS, isTooShortToKeepWarm, KEEP_WARM_MIN_TTL_MS, MAX_PINGS, MINUTE_MS, PING_LEAD_MS } from './cache-timing'
+import { HOUR_MS, isTooShortToKeepWarm, KEEP_WARM_MIN_TTL_MS, MINUTE_MS, PING_LEAD_MS } from './cache-timing'
 import { cacheLength, clockTime, minutes, tokens } from './format'
 import { switchOff, switchOn } from './keep-warm-switch'
 import { needsVisiblePing, type SessionSnapshot } from './session-snapshot'
-import { readSnapshot } from './state'
+import { live, readSnapshot } from './state'
 
 export const COMMAND = {
   name: 'keepwarm',
@@ -29,7 +29,7 @@ export async function runKeepwarm($: EngineInterface, args: string) {
     if (stopAt < 0) return { text: NOT_UNDERSTOOD }
     await switchOn($, stopAt)
   }
-  return { text: statusText(await readSnapshot($)) }
+  return { text: statusText(await readSnapshot($), live.maxPings) }
 }
 
 // "3h", "90m", "until 18:00" -> when keep-warm stops; 0 = no stop time; -1 = not understood.
@@ -44,11 +44,11 @@ export function parseStop(text: string, now: number) {
   return at.getTime() > now ? at.getTime() : at.getTime() + 24 * HOUR_MS
 }
 
-export function statusText(session: SessionSnapshot) {
+export function statusText(session: SessionSnapshot, maxPings: number) {
   const { isOn, stopAt, ttl, pings } = session
   const lines = [
     isOn
-      ? `Keep-warm on${stopAt ? ` until ${clockTime(stopAt)}` : ` (stops itself after ${MAX_PINGS} pings in a row)`}: about ${minutes(PING_LEAD_MS)} min before the cache would expire, it re-reads the conversation from cache in the background. A cold cache is never pinged.`
+      ? `Keep-warm on${stopAt ? ` until ${clockTime(stopAt)}` : ` (stops itself after ${maxPings} pings in a row)`}: about ${minutes(PING_LEAD_MS)} min before the cache would expire, it re-reads the conversation from cache in the background. A cold cache is never pinged.`
       : 'Keep-warm off: the cache expires normally.',
   ]
   if (isOn && needsVisiblePing(session)) lines.push('Claude Code can repeat this conversation invisibly only once it has answered since the app started, so the next ping is a short message in the chat.')

@@ -18,9 +18,19 @@ export const KEEP_WARM_MIN_TTL_MS = 30 * MINUTE_MS
 // recorded here, so the real deadline is slightly later than computed.
 export const PING_LEAD_MS = 8 * MINUTE_MS
 export const PING_MARGIN_MS = MINUTE_MS
-// Without an explicit stop time, keep-warm stops itself after this many pings in a row
-// (~15 h): past ~30 h idle, re-writing the cache once is cheaper than pinging.
-export const MAX_PINGS = 20
+// Without an explicit stop time, keep-warm stops itself after this many pings in a row (the
+// `max_pings` option; 8 by default, ~7 h). A ping reads the cache at 0.1x its size, re-writing a
+// 1-hour cache costs 2x: 20 pings is where pinging stops paying even for a sure return, and the
+// longer the break, the less likely the return.
+export const DEFAULT_MAX_PINGS = 8
+export const MAX_PINGS_CAP = 20
+
+// The `max_pings` option as a whole number brought into 1..MAX_PINGS_CAP; not a number, the default.
+export function pingLimit(option: unknown) {
+  if (typeof option !== 'number' || !Number.isFinite(option)) return DEFAULT_MAX_PINGS
+  return Math.min(Math.max(Math.floor(option), 1), MAX_PINGS_CAP)
+}
+
 // A request reading at least this share of the conversation from cache found it still warm.
 const HIT_SHARE = 0.5
 

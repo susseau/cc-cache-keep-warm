@@ -27,8 +27,16 @@
     "default_on": {
       "type": "boolean",
       "title": "On in new sessions",
-      "description": "Turn keep-warm on in every new session, as if you ran /keepwarm on. Each session still stops by itself after 20 pings in a row",
+      "description": "Turn keep-warm on in every new session, as if you ran /keepwarm on. Each session still stops by itself after the set number of pings in a row",
       "default": false
+    },
+    "max_pings": {
+      "type": "number",
+      "title": "Pings in a row",
+      "description": "Without a stop time, keep-warm stops itself after this many pings in a row, one about every 52 minutes (1 to 20; 8 is about 7 hours). Any real turn in the conversation starts the count over",
+      "default": 8,
+      "min": 1,
+      "max": 20
     }
   }
 }
