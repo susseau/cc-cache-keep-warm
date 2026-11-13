@@ -36,7 +36,7 @@ export function drawLine({ Box, Button, Text }: LineComponents, model: LineModel
         {color ? <Text color={color}>{BAR_FULL.repeat(model.filledCells)}</Text> : <Text dimColor>{BAR_FULL.repeat(model.filledCells)}</Text>}
         <Text dimColor>{BAR_EMPTY.repeat(BAR_CELLS - model.filledCells)}</Text>
       </Box>
-      <Box flexShrink={0} width={BUTTON_WIDTH}>
+      <Box flexShrink={0} width={BUTTON_WIDTH} marginLeft={1}>
         {model.canToggle
           ? <Button key="toggle" label={model.isOn ? STOP_LABEL : START_LABEL} onPress={onToggle} />
           : <Button key="toggle" label={START_LABEL} dimColor onPress={() => {}} />}
