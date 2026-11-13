@@ -1,6 +1,23 @@
 # Cache Keep-Warm: notes for working on this mod
 
-A Claude Code mod (a plugin of function hooks). The code is `hooks/register.tsx`, its state contract `types/index.d.ts`, the manifests `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` (this repo is its own marketplace, plugin source `./`).
+A Claude Code mod (a plugin of function hooks). The code is in `hooks/` (below), its state contract `types/index.d.ts`, the manifests `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` (this repo is its own marketplace, plugin source `./`).
+
+## Code layout
+
+`hooks/hooks.json` loads `hooks/register.tsx`, which only wires the events to the modules that own them. Each module either reads and writes (takes `$`) or decides (pure, no `$`), never both:
+
+- `register.tsx`: the `on(...)` hooks and the two userConfig options; no logic of its own.
+- `state.ts`: every `$.state` ref (private), `live` (module variables), `readSnapshot` / `writeSession`, `needsVisiblePing`.
+- `session-store.ts`: `$.store`: save, restore after a relaunch, the weekly clean-up, `plan-ttl`.
+- `cache-timing.ts`: the shared lengths and limits (ping lead, 20 pings, 30-min minimum), `isCacheHit`.
+- `format.ts`: minutes, clock time, token counts.
+- `ttl/`: the cache length. `read-ttl.ts` reads env, settings and plan windows; `decide-ttl.ts` decides (pure); `cache-length.ts` ties them to the session and records a cache seen going cold early.
+- `ping/`: `schedule.ts` is the 15-s tick; `decide-ping.ts` decides when and which ping (pure); `ping.ts` sends it (fork, or the visible fallback) and checks the room for it.
+- `events/`: `session.ts` (start, resume, `/clear`, compaction) and `turn.ts` (each request and turn of the main conversation).
+- `command.ts`: `/keepwarm`; `parseStop` and `statusText` are pure.
+- `line/`: `line-model.ts` decides what the line says (pure), `line-view.tsx` draws it.
+- `title.ts`: the session-title mark.
+- `keep-warm-switch.ts`: switching keep-warm on and off, "On in new sessions".
 
 These notes live in `.claude/` on purpose: a `CLAUDE.md` at the plugin root makes `claude plugin validate` warn.
 
@@ -12,6 +29,7 @@ These notes live in `.claude/` on purpose: a `CLAUDE.md` at the plugin root make
 
 ## Checking a change
 
+- `claude plugin test .` runs `tests/`: `keep-warm.test.ts` and `line.test.ts` drive the mod through a stub engine (`tests/engine.ts`), `decisions.test.ts` covers the pure functions. The kit stops a test after 5 s: "stops itself after 20 pings" runs ~4400 ticks and only fits on an idle machine. The kit cannot pass plugin options, so `default_on` has no test.
 - `claude plugin validate --strict .` checks the marketplace; `claude plugin validate --strict ./.claude-plugin/plugin.json` checks the plugin and the hooks module. The `hooks:` and `calls:` lines list everything the module does.
 - The mod API is declared in `.claude-plugin/types/claude-code/index.d.ts`, which Claude Code writes when it loads the mod (gitignored). Grep it for an event or a `$` method. The built-in `plugin-authoring` skill explains the API.
 - To test the public install from scratch, point `CLAUDE_CONFIG_DIR` at a fresh, SHORT temp folder (a long path fails with "Filename too long"), unset `CLAUDE_CODE_PLUGIN_DIRS`, then run the README's terminal commands. Install instructions use the full HTTPS address: the `owner/repo` form makes Claude Code try SSH first.
@@ -20,7 +38,7 @@ These notes live in `.claude/` on purpose: a `CLAUDE.md` at the plugin root make
 ## Mod API lessons (Claude Code 2.1.286)
 
 - `claude plugin validate` rejects passing `$` to the `atom` / `read` / `update` helpers from `'claude-code'`, even the shipped examples: use `$.state.get` / `$.state.set` with literal `{ plugin, key } as const` refs.
-- `$` may only be passed into functions declared in this file; `$.env.get` takes string literals.
+- `$` may be passed into functions in other files of the mod. `$.state.get` / `$.state.set` take a ref whose `plugin` and `key` are literals written in the calling file (a ref imported from another file fails validation): hence all of them live in `state.ts`. A hook matcher must be a literal too (`{ command: 'keepwarm' }`, not a constant), or the validator lists it as `command=?`. `$.env.get` takes string literals.
 - Read a setting by its key, `$.settings.read({ key: 'promptCacheTtl' })`, which resolves to that value alone: `$.settings.read()` hands over every setting, `env` and credentials included, and the directory flags it as "uses a credential" (since 1.0.10).
 - The desktop app collapses runs of spaces inside one `Text`, non-breaking spaces included: space details with separate elements and a `Box` `columnGap`.
 - In the desktop font the plain `●` is smaller than `◔ ◑ ◕`: the full circle is `⚫` + U+FE0E (text style); `○` for cold.
