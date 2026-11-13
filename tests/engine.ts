@@ -72,10 +72,14 @@ export function stubEngine(on: any, { env = {}, store = {} }: { env?: Record<str
   })
   on('tool.call', (_$: any, e: any) => {
     if (engine.title === undefined) return { deny: 'no session tools in a terminal' }
-    if (e.tool === 'mcp__ccd_session_mgmt__get_session') return { result: { text: JSON.stringify({ title: engine.title }) } }
+    // Like Claude Code 2.1.323: the tool's record in `result`, its answer as text in `text`.
+    if (e.tool === 'mcp__ccd_session_mgmt__get_session') {
+      const text = JSON.stringify({ title: engine.title })
+      return { result: text, text }
+    }
     engine.title = e.title
     engine.titles.push(e.title)
-    return { result: { text: 'ok' } }
+    return { result: 'ok', text: 'ok' }
   })
   on('model.fork', () => {
     engine.forks++

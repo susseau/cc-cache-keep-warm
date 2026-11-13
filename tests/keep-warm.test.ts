@@ -203,15 +203,22 @@ test('sessions untouched for a week are forgotten', async ($, on) => {
   expect(Object.keys(engine.store).sort()).toEqual(['plan-ttl', 'session:S1', 'session:recent'])
 })
 
-// Claude Code 2.1.323 answers $.tool.call with { result }, while the mod reads the title from
-// `text` at the top: it finds no title and leaves it as it is (bug ckw-but).
-test('the title mark: unchanged until ckw-but is fixed', async ($, on) => {
+test('the title mark: on with keep-warm, off without it', async ($, on) => {
   const { engine } = stubEngine(on)
   engine.title = 'Refactor'
   await start($)
   await answer($, engine, WRITE)
   await keepwarm($, 'on')
+  expect(engine.title).toEqual('🟢 Refactor')
   await keepwarm($, 'off')
+  expect(engine.titles).toEqual(['🟢 Refactor', 'Refactor'])
+})
+
+test('the title mark: nothing changes where the session tools are missing', async ($, on) => {
+  const { engine } = stubEngine(on)
+  await start($)
+  await answer($, engine, WRITE)
+  await keepwarm($, 'on')
   expect(engine.titles).toEqual([])
 })
 
