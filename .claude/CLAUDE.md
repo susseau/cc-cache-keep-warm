@@ -4,7 +4,7 @@ A Claude Code mod (a plugin of function hooks). The code is in `hooks/` (below),
 
 ## Code layout
 
-`hooks/hooks.json` loads `hooks/register.tsx`, which only wires the events to the modules that own them. The decisions sit in pure modules (no `$`, no state module): `decide-ttl.ts`, `decide-ping.ts`, `line-model.ts`, `session-snapshot.ts`, `format.ts`, `cache-timing.ts`; `command.ts` keeps its pure `parseStop` / `statusText` next to the handler:
+`hooks/hooks.json` loads `hooks/register.tsx`, which only wires the events to the modules that own them. The decisions sit in pure modules (no `$`, no state module): `decide-ttl.ts`, `decide-ping.ts`, `line-model.ts`, `bar-model.ts`, `session-snapshot.ts`, `format.ts`, `cache-timing.ts`; `command.ts` keeps its pure `parseStop` / `statusText` next to the handler:
 
 - `register.tsx`: the `on(...)` hooks and the three userConfig options; only which event goes where.
 - `state.ts`: every `$.state` ref (private), `live` (module variables), `readSnapshot` / `writeSession`, `appendPing`.
@@ -16,7 +16,7 @@ A Claude Code mod (a plugin of function hooks). The code is in `hooks/` (below),
 - `ping/`: `schedule.ts` is the 15-s tick; `decide-ping.ts` decides when and which ping (pure); `ping.ts` sends it (fork, or the visible fallback) and checks the room for it.
 - `events/`: `session.ts` (start, resume, `/clear`, compaction) and `turn.ts` (each request and turn of the main conversation).
 - `command.ts`: `/keepwarm`; `parseStop` and `statusText` are pure.
-- `line/`: `line-model.ts` decides what the line says (pure), `line-view.tsx` draws it.
+- `line/`: `line-model.ts` decides what the line says (pure), `bar-model.ts` how full its bar is (pure), `line-view.tsx` draws it.
 - `title.ts`: the session-title mark.
 - `keep-warm-switch.ts`: switching keep-warm on and off, "On in new sessions".
 

@@ -2,10 +2,8 @@
 import { HOUR_MS, isLongEnoughToKeepWarm, MINUTE_MS, PING_LEAD_MS } from '../cache-timing'
 import { cacheLength, clockTime, minutes, timeLeft, tokens } from '../format'
 import { needsVisiblePing, type SessionSnapshot } from '../session-snapshot'
+import { filledCells } from './bar-model'
 
-// Blocks that empty over the cache's life, the one gauge of the time left: filled blocks in the
-// line's tone, outlined blocks for the time already gone.
-export const BAR_CELLS = 10
 // Nerd Font icons, as in the aby panel: the next ping and the clock time the cache expires.
 const NEXT_ICON = '󰁔'
 const EXPIRES_ICON = '󰔟'
@@ -40,7 +38,7 @@ export function lineModel(session: SessionSnapshot): LineModel {
   const canKeepWarm = isLongEnoughToKeepWarm(ttl)
   const isKeepingWarm = isOn && canKeepWarm && !session.pingError && !isBlocked(session)
   return {
-    filledCells: countdown.isWarm ? Math.max(1, Math.ceil((countdown.remaining / countdown.ttlMs) * BAR_CELLS)) : 0,
+    filledCells: filledCells(countdown),
     tone: isKeepingWarm ? 'keeping' : isOn ? 'stalled' : 'off',
     main: lastRequestAt === 0 ? 'nothing cached yet' : countdown.isWarm ? timeLeft(countdown.remaining) : `cold since ${clockTime(countdown.expiresAt)}`,
     details: [...waitingDetails(session, countdown), ...expiryDetails(session, countdown, isKeepingWarm), ...keepWarmDetails(session, countdown), ...cachedDetails(session, countdown, isKeepingWarm)],
