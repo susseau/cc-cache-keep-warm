@@ -74,9 +74,12 @@ taskami, commitem `0bdfc87`: `.markdownlint.jsonc` wyłącza MD013, MD033, MD034
 - `hooks/session-store.ts` — zapis i odtworzenie trzech pól; zależy od: `hooks/state.ts`,
   `hooks/savings.ts`
 - `hooks/command.ts` — linia bilansu w `statusText`; zależy od: `hooks/savings.ts`,
-  `hooks/format.ts`
-- `tests/decisions.test.ts` — dowodzi rachunku bilansu, detalu linii i `statusText`; zależy od:
-  `hooks/savings.ts`, `hooks/line/line-model.ts`, `hooks/command.ts`
+  `hooks/format.ts`, `types/index.d.ts`
+- `tests/savings.test.ts` (nowy) — dowodzi rachunku bilansu i jego słów w linii i w
+  `/keepwarm status`; zależy od: `hooks/savings.ts`, `hooks/line/line-model.ts`,
+  `hooks/command.ts`
+- `tests/decisions.test.ts` — helper `snapshot` z trzema nowymi polami; zależy od:
+  `hooks/session-snapshot.ts`, `hooks/savings.ts`
 - `tests/keep-warm.test.ts` — dowodzi bilansu na stub engine: ping, powrót, pauza, relaunch,
   `/clear`; zależy od: `tests/engine.ts`
 - `tests/line.test.ts` — asercje linii z paskiem 6 kropek; zależy od: `tests/engine.ts`
@@ -105,7 +108,8 @@ taskami, commitem `0bdfc87`: `.markdownlint.jsonc` wyłącza MD013, MD033, MD034
 - Zmodyfikuj: `hooks/line/line-model.ts` (import, `keepWarmDetails`, nowa `savingsDetails`)
 - Zmodyfikuj: `README.md:100-115`, `README.md:202`, `README.md:218`
 - Zmodyfikuj: `.claude/CLAUDE.md` (sekcje „Code layout” i „Behaviour agreed with the owner”)
-- Test: `tests/decisions.test.ts`, `tests/keep-warm.test.ts`
+- Utwórz test: `tests/savings.test.ts`
+- Test: `tests/decisions.test.ts` (helper `snapshot`), `tests/keep-warm.test.ts`
 
 **Interfejsy:**
 
@@ -253,7 +257,7 @@ refactoru.
 W `tests/decisions.test.ts` dopisz import pod importem `../hooks/command`:
 
 ```ts
-import { addPing, addSavedReturn, isSavedReturn, NO_SAVINGS, requestCost } from '../hooks/savings'
+import { NO_SAVINGS } from '../hooks/savings'
 ```
 
 Helper `snapshot` (linie 113-116) dostaje trzy nowe pola, bez nich typ się nie skompiluje:
@@ -266,10 +270,29 @@ const snapshot = (fields: Partial<SessionSnapshot> = {}): SessionSnapshot => ({
 })
 ```
 
-Dopisz na końcu pliku (`READ` = 10 wejścia, 5 wyjścia, 50k odczytu; `WRITE` = 10 wejścia,
-5 wyjścia, 50k zapisu):
+Testy bilansu idą do nowego pliku `tests/savings.test.ts` (`decisions.test.ts` poza helperem bez
+zmian). `READ` = 10 wejścia, 5 wyjścia, 50k odczytu; `WRITE` = 10 wejścia, 5 wyjścia, 50k zapisu:
 
 ```ts
+// What keep-warm cost and saved, without an engine: the account and how the line and /keepwarm word it.
+import { expect, test } from 'claude-code/testing'
+
+import { lineModel } from '../hooks/line/line-model'
+import { addPing, addSavedReturn, isSavedReturn, NO_SAVINGS, requestCost } from '../hooks/savings'
+import type { SessionSnapshot } from '../hooks/session-snapshot'
+import { MINUTE, READ, START, WRITE } from './engine'
+
+const SUBSCRIPTION_TTL = { ms: 60 * MINUTE, reason: 'subscription' } as const
+const OBSERVED_TTL = { ms: 10 * MINUTE, reason: 'observed' } as const
+const PAID_BACK = { pings: 1, pingCost: 5_035, returns: 1, saved: 95_000 }
+const NOT_PAID_BACK = { pings: 1, pingCost: 5_035, returns: 0, saved: 0 }
+
+const snapshot = (fields: Partial<SessionSnapshot> = {}): SessionSnapshot => ({
+  lastRequestAt: START, now: START, isOn: false, stopAt: 0, pings: [], ttl: SUBSCRIPTION_TTL, contextTokens: 54_000,
+  isWaiting: false, shortAfterMs: 0, waitsForMessage: false, sawResponse: true, pingError: '', nearlyFull: false,
+  lastRealRequestAt: START, lastWarmPingAt: 0, savings: NO_SAVINGS, ...fields,
+})
+
 test('requestCost: input 1, cache read 0.1, 1-hour write 2, output 5', async () => {
   expect(requestCost(READ)).toEqual(5_035)
   expect(requestCost(WRITE)).toEqual(100_035)
@@ -295,24 +318,21 @@ test('isSavedReturn: a warm cache after a break longer than the cache, with a wa
   expect(isSavedReturn({ ...back, ttl: null })).toEqual(false)
 })
 
-const PAID_BACK = { pings: 1, pingCost: 5_035, returns: 1, saved: 95_000 }
-const NOT_PAID_BACK = { pings: 1, pingCost: 5_035, returns: 0, saved: 0 }
-const OBSERVED_TTL = { ms: 10 * MINUTE, reason: 'observed' } as const
-
 test('lineModel: a net saving reads "saved", after the ping count', async () => {
-  expect(lineModel(snapshot({ isOn: true, savings: PAID_BACK })).details).toEqual(['󰁔 ping 10:52', 'saved 90k', '54k cached'])
+  const pings = [{ at: START - 8 * MINUTE, isHit: true, read: 50_000 }]
+  expect(lineModel(snapshot({ isOn: true, pings, savings: PAID_BACK })).details).toEqual(['󰁔 ping 10:52', '1 ping ✓', '󰆼 saved 90k', '54k cached'])
 })
 
 test('lineModel: pings not paid back yet read "cost"', async () => {
-  expect(lineModel(snapshot({ isOn: true, savings: NOT_PAID_BACK })).details).toContain('cost 5k')
+  expect(lineModel(snapshot({ isOn: true, savings: NOT_PAID_BACK })).details).toContain('󰆼 cost 5k')
 })
 
 test('lineModel: the account stays while keep-warm is paused', async () => {
-  expect(lineModel(snapshot({ isOn: true, ttl: OBSERVED_TTL, shortAfterMs: 10 * MINUTE, savings: NOT_PAID_BACK })).details).toContain('cost 5k')
+  expect(lineModel(snapshot({ isOn: true, ttl: OBSERVED_TTL, shortAfterMs: 10 * MINUTE, savings: NOT_PAID_BACK })).details).toContain('󰆼 cost 5k')
 })
 
 test('lineModel: no account while keep-warm is off', async () => {
-  expect(lineModel(snapshot({ savings: PAID_BACK })).details).not.toContain('saved 90k')
+  expect(lineModel(snapshot({ savings: PAID_BACK })).details).not.toContain('󰆼 saved 90k')
 })
 
 test('lineModel: no account before the first ping', async () => {
@@ -321,12 +341,12 @@ test('lineModel: no account before the first ping', async () => {
 ```
 
 W `tests/keep-warm.test.ts` zmień trzy istniejące asercje linii, bo ping ma teraz koszt
-(`READ` → 5 035 → „cost 5k”):
+(`READ` → 5 035 → „󰆼 cost 5k”):
 
-- linia 49: `'󰁔 ping 11:44·1 ping ✓·cost 5k·54k cached·60 min left•••••••••• 󰓛 Stop '`
-- linia 88: `'󰁔 ping 11:44·cost 5k·54k cached·60 min left•••••••••• 󰓛 Stop '` (powrót o 10:52, po
-  52 min, krótszy niż cache: bez zysku)
-- linia 135: `'󰁔 ping 11:34·1 ping ✓·cost 5k·54k cached·60 min left•••••••••• 󰓛 Stop '`
+- linia 49: `'󰁔 ping 11:44·1 ping ✓·󰆼 cost 5k·54k cached·60 min left•••••••••• 󰓛 Stop '`
+- linia 88 (powrót o 10:52, po 52 min, krótszy niż cache: bez zysku):
+  `'󰁔 ping 11:44·󰆼 cost 5k·54k cached·60 min left•••••••••• 󰓛 Stop '`
+- linia 135: `'󰁔 ping 11:34·1 ping ✓·󰆼 cost 5k·54k cached·60 min left•••••••••• 󰓛 Stop '`
 
 Dopisz po teście `'a real turn starts the pings in a row over'`:
 
@@ -338,7 +358,7 @@ test('a return the pings kept warm: the line shows what keep-warm saved', async 
   await keepwarm($, 'on')
   await clock.advance(70 * MINUTE)
   await answer($, engine, READ)
-  expect(await line($)).toEqual('󰁔 ping 12:02·saved 90k·54k cached·60 min left•••••••••• 󰓛 Stop ')
+  expect(await line($)).toEqual('󰁔 ping 12:02·󰆼 saved 90k·54k cached·60 min left•••••••••• 󰓛 Stop ')
 })
 
 test('a paused keep-warm still shows what its pings cost', async ($, on) => {
@@ -348,11 +368,11 @@ test('a paused keep-warm still shows what its pings cost', async ($, on) => {
   await keepwarm($, 'on')
   engine.fork = { isAnswered: true, usage: WRITE }
   await clock.advance(52 * MINUTE + 15_000)
-  expect(await line($)).toContain('keep-warm paused·cost 100k')
+  expect(await line($)).toContain('keep-warm paused·󰆼 cost 100k')
 })
 ```
 
-(Zimny ping zapisuje 50k na nowo: 100 035 → „cost 100k”. Kolejny tick przyjmuje krótszy cache i
+(Zimny ping zapisuje 50k na nowo: 100 035 → „󰆼 cost 100k”. Kolejny tick przyjmuje krótszy cache i
 wstrzymuje keep-warm, a koszt zostaje w linii.)
 
 (Odpowiedź o 10:00, ping o 10:52, powrót o 11:10: 70 min od ostatniego prawdziwego requestu,
@@ -365,7 +385,7 @@ claude plugin test .
 ```
 
 Oczekiwany output: FAIL — brak modułu `../hooks/savings`, a w `keep-warm.test.ts` linie bez
-„cost 5k” i „saved 90k”.
+„󰆼 cost 5k” i „󰆼 saved 90k”.
 
 - [ ] **Krok 7: Zaimplementuj minimalnie**
 
@@ -550,6 +570,12 @@ export async function accountRealRequest($: EngineInterface, now: number, usage:
   ta funkcja wychodzi wcześniej przy wstrzymanym keep-warm (za krótki cache), a koszt pingów
   ma być widoczny także wtedy. Za liczbą pingów stoi więc nadal, bo `keepWarmDetails` kończy się
   na `pingCountDetails`;
+- pod `EXPIRES_ICON` dopisz ikonę bilansu (Nerd Font, jak pozostałe):
+
+```ts
+const SAVINGS_ICON = '󰆼'
+```
+
 - pod `pingCountDetails`:
 
 ```ts
@@ -558,7 +584,7 @@ export async function accountRealRequest($: EngineInterface, now: number, usage:
 function savingsDetails({ isOn, savings }: SessionSnapshot) {
   if (!isOn || savings.pings === 0) return []
   const net = netSaving(savings)
-  return [net >= 0 ? `saved ${tokens(net)}` : `cost ${tokens(-net)}`]
+  return [`${SAVINGS_ICON} ${net >= 0 ? `saved ${tokens(net)}` : `cost ${tokens(-net)}`}`]
 }
 ```
 
@@ -567,7 +593,7 @@ function savingsDetails({ isOn, savings }: SessionSnapshot) {
 - w tabeli „Reading the line”, pod wierszem `**3 pings ✓**`:
 
 ```markdown
-| **saved 90k** | What keep-warm has saved in this session so far, once it has pinged: each time you came back after a break longer than the cache and found it warm, it saved re-writing your conversation (a re-write costs 2x, a cache read 0.1x), minus what every ping cost. In input-token equivalents. **cost 5k** while no return has paid the pings back yet. Shown while keep-warm is on. |
+| **󰆼 saved 90k** | What keep-warm has saved in this session so far, once it has pinged: each time you came back after a break longer than the cache and found it warm, it saved re-writing your conversation (a re-write costs 2x, a cache read 0.1x), minus what every ping cost. In input-token equivalents. **󰆼 cost 5k** while no return has paid the pings back yet. Shown while keep-warm is on. |
 ```
 
 - linia 202: `(how many tokens were read from the cache or written to it)` →
@@ -585,10 +611,16 @@ function savingsDetails({ isOn, savings }: SessionSnapshot) {
 - `savings-account.ts`: the keep-warm account in `$.state`: books each ping (history, cost, last warm ping) and each real request (a saved return).
 ```
 
+- „Behaviour agreed with the owner”, w pierwszym punkcie zastąp
+  `20 is the break-even even for a sure return: a ping reads the cache at 0.1x, re-writing a
+  1-hour cache costs 2x (owner's ruling 2026-11-13, was 20)` tekstem
+  `About 19 pings are the break-even even for a sure return: a ping reads the cache at 0.1x (plus
+  its few input and output tokens), a return to a warm cache saves 1.9x what it reads (a 2x
+  re-write less the 0.1x read; owner's ruling 2026-11-13, was 20)`;
 - „Behaviour agreed with the owner”, nowy punkt na końcu:
 
 ```markdown
-- What keep-warm saved (ckw-0zj, owner's choices 2026-11-16): a ping costs its whole request (input 1, cache read 0.1, 1-hour write 2, output 5, in input-token equivalents); a real request after a break longer than the cache, with a warm ping since the last real one, that finds the cache warm saves 1.9x what it read. The line shows the net ("saved 90k", "cost 5k") after the ping count, while keep-warm is on (paused included); `/keepwarm status` shows the whole account once keep-warm has pinged. The account lives for the whole session, through `/clear`, compactions and relaunches.
+- What keep-warm saved (ckw-0zj, owner's choices 2026-11-16): a ping costs its whole request (input 1, cache read 0.1, 1-hour write 2, output 5, in input-token equivalents); a real request after a break longer than the cache, with a warm ping since the last real one, that finds the cache warm saves 1.9x what it read. The line shows the net ("󰆼 saved 90k", "󰆼 cost 5k") after the ping count, while keep-warm is on (paused included); `/keepwarm status` shows the whole account once keep-warm has pinged. The account lives for the whole session, through `/clear`, compactions and relaunches.
 ```
 
 - [ ] **Krok 8: Uruchom, potwierdź pass**
@@ -602,7 +634,7 @@ Oczekiwany output: PASS wszystkich testów; walidacja bez błędów.
 - [ ] **Krok 9: Commit**
 
 ```bash
-git add hooks/savings.ts hooks/savings-account.ts hooks/ping/ping.ts types/index.d.ts hooks/session-snapshot.ts hooks/state.ts hooks/events/request.ts hooks/line/line-model.ts tests/decisions.test.ts tests/keep-warm.test.ts README.md .claude/CLAUDE.md && git commit -m "ckw-0zj: bilans keep-warm w pasku (koszt pingów, uratowane powroty)"
+git add hooks/savings.ts hooks/savings-account.ts hooks/ping/ping.ts types/index.d.ts hooks/session-snapshot.ts hooks/state.ts hooks/events/request.ts hooks/line/line-model.ts tests/decisions.test.ts tests/savings.test.ts tests/keep-warm.test.ts README.md .claude/CLAUDE.md && git commit -m "ckw-0zj: bilans keep-warm w pasku (koszt pingów, uratowane powroty)"
 ```
 
 ---
@@ -655,7 +687,7 @@ test('a ping before a relaunch and a return after it: the saving counts and is k
   const saved = { ...SAVED_ON, lastRealRequestAt: START - 70 * MINUTE, lastWarmPingAt: START - 10 * MINUTE, savings }
   const { engine } = stubEngine(on, { store: { 'session:S1': saved } })
   await start($)
-  expect(await line($)).toEqual('󰁔 ping 10:42 (shows in chat)·saved 80k·54k cached·50 min left•••••••••· 󰓛 Stop ')
+  expect(await line($)).toEqual('󰁔 ping 10:42 (shows in chat)·󰆼 saved 80k·54k cached·50 min left•••••••••· 󰓛 Stop ')
   await answer($, engine, READ)
   expect((engine.store['session:S1'] as { savings: unknown }).savings).toEqual({ pings: 3, pingCost: 15_105, returns: 2, saved: 190_000 })
 })
@@ -667,7 +699,7 @@ test('/clear keeps what keep-warm saved this session', async ($, on) => {
   await keepwarm($, 'on')
   await clock.advance(52 * MINUTE)
   await $.classic.SessionStart({ session_id: 'S1', transcript_path: '/t', cwd: '/work', hook_event_name: 'SessionStart', source: 'clear' } as any)
-  expect(await line($)).toContain('cost 5k')
+  expect(await line($)).toContain('󰆼 cost 5k')
 })
 
 test('a return after /clear is no saved return: the ping warmed the conversation before it', async ($, on) => {
@@ -678,7 +710,7 @@ test('a return after /clear is no saved return: the ping warmed the conversation
   await clock.advance(70 * MINUTE)
   await $.classic.SessionStart({ session_id: 'S1', transcript_path: '/t', cwd: '/work', hook_event_name: 'SessionStart', source: 'clear' } as any)
   await answer($, engine, READ)
-  expect(await line($)).toContain('cost 5k')
+  expect(await line($)).toContain('󰆼 cost 5k')
 })
 ```
 
@@ -702,7 +734,7 @@ claude plugin test .
 
 Oczekiwany output: FAIL w
 `'a ping before a relaunch and a return after it: the saving counts and is kept'` (linia bez
-„saved 80k”) i w `'a return after /clear is no saved return: …'` (linia z „saved 90k”).
+„󰆼 saved 80k”) i w `'a return after /clear is no saved return: …'` (linia z „󰆼 saved 90k”).
 
 - [ ] **Krok 3: Zaimplementuj minimalnie**
 
@@ -800,7 +832,7 @@ git add types/index.d.ts hooks/session-store.ts hooks/events/request.ts hooks/ev
 
 - Zmodyfikuj: `hooks/command.ts:1-61`
 - Zmodyfikuj: `README.md:96`
-- Test: `tests/decisions.test.ts`
+- Test: `tests/savings.test.ts`
 
 **Interfejsy:**
 
@@ -826,7 +858,8 @@ testem.
 
 - [ ] **Krok 1: Napisz failing test**
 
-W `tests/decisions.test.ts` dopisz po teście `'statusText: on, its ping history and a short cache'`:
+W `tests/savings.test.ts` dopisz import `import { statusText } from '../hooks/command'` (pod
+importem `claude-code/testing`) i na końcu pliku:
 
 ```ts
 test('statusText: pings, saved returns, cost and a net saving', async () => {
@@ -895,7 +928,7 @@ Oczekiwany output: PASS wszystkich testów.
 - [ ] **Krok 5: Commit**
 
 ```bash
-git add hooks/command.ts tests/decisions.test.ts README.md && git commit -m "ckw-0zj: /keepwarm status pokazuje bilans sesji"
+git add hooks/command.ts tests/savings.test.ts README.md && git commit -m "ckw-0zj: /keepwarm status pokazuje bilans sesji"
 ```
 
 ---
