@@ -17,8 +17,11 @@ const STOP_LABEL = '󰓛 Stop'
 // block: 6 columns of label (the icon is one column, two UTF-16 units) and one each side.
 const BUTTON_PADDING = ' '
 const BUTTON_WIDTH = 8
-// Muted on purpose (owner's choice): steel blue and ochre; off is the dim default.
-const TONE_COLORS: Record<LineTone, string | undefined> = { keeping: '#5f87af', stalled: '#af875f', off: undefined }
+// Muted on purpose (owner's choice): steel blue and mustard; off is the dim default.
+const TONE_COLORS: Record<LineTone, string | undefined> = { keeping: '#5f87af', stalled: '#b5a55f', off: undefined }
+// The Warm button while keep-warm is off: a muted rust that invites a press without shouting,
+// apart from the mustard of `stalled` so the two never look alike (owner's choice, ckw-tm6).
+const WARM_BUTTON_COLOR = '#a9714f'
 
 export type LineComponents = ReturnType<EngineInterface['ui']['resolve']>
 
@@ -43,15 +46,15 @@ export function drawLine(components: LineComponents, model: LineModel, onToggle:
       </Box>
       <Box flexShrink={0} width={BUTTON_WIDTH}>
         {model.canToggle
-          ? toggleButton(components, { label: model.isOn ? STOP_LABEL : START_LABEL, color }, onToggle)
+          ? toggleButton(components, { label: model.isOn ? STOP_LABEL : START_LABEL, color: color ?? WARM_BUTTON_COLOR }, onToggle)
           : toggleButton(components, { label: START_LABEL })}
       </Box>
     </Box>
   )
 }
 
-// In the bar's colour while keep-warm is on; dim while it is off (the bar is grey then) and on the
-// inert button, which has no `onPress`: a press does nothing.
+// In the bar's colour while keep-warm is on, in muted rust while it is off (the bar is grey then);
+// dim only on the inert button, which has no `onPress`: a press does nothing.
 function toggleButton({ Button, Text }: LineComponents, { label, color }: { label: string, color?: string }, onPress?: () => void) {
   const isDim = !color || !onPress
   return (
