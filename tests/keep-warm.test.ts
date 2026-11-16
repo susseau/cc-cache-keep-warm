@@ -175,6 +175,18 @@ test('a ping before a relaunch and a return after it: the saving counts and is k
   expect((engine.store['session:S1'] as { savings: unknown }).savings).toEqual({ pings: 3, pingCost: 15_105, returns: 2, saved: 190_000 })
 })
 
+test('a return after the visible ping counts as saved; the visible ping itself is no return', async ($, on) => {
+  const saved = { ...SAVED_ON, lastRealRequestAt: START - 10 * MINUTE }
+  const { engine, clock } = stubEngine(on, { store: { 'session:S1': saved } })
+  await start($)
+  await clock.advance(42 * MINUTE)
+  await answer($, engine, READ)
+  expect((await keepwarm($, 'status')).split('\n')).toContain('This session: 1 ping cost 5k, 0 returns to a warm cache saved 0k: 5k spent (input-token equivalents).')
+  await clock.advance(10 * MINUTE)
+  await answer($, engine, READ)
+  expect((await keepwarm($, 'status')).split('\n')).toContain('This session: 1 ping cost 5k, 1 return to a warm cache saved 95k: 90k saved (input-token equivalents).')
+})
+
 test('/clear keeps what keep-warm saved this session', async ($, on) => {
   const { engine, clock } = stubEngine(on)
   await start($)
