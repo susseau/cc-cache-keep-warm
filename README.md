@@ -224,7 +224,7 @@ It checks these every 15 seconds, on your computer, and sends none of them anywh
 
 ### What it keeps
 
-Per session, in Claude Code's plugin storage on your computer: the time of the last request, whether keep-warm is on, and the stop time you gave it. A session untouched for a week is forgotten. Shared by your sessions, it also keeps the last cache length your plan showed (one hour or five minutes), so a session you reopen knows it before its first answer.
+Per session, in Claude Code's plugin storage on your computer: the time of the last request (and of the last one that was not a ping, and of the last ping that found the cache warm), whether keep-warm is on, the stop time you gave it, and what keep-warm cost and saved in it (token counts only). A session untouched for a week is forgotten. Shared by your sessions, it also keeps the last cache length your plan showed (one hour or five minutes), so a session you reopen knows it before its first answer.
 
 ### The events it hooks
 

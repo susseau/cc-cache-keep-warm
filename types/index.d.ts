@@ -1,9 +1,13 @@
 /**
  * What the mod remembers per session id in `$.store`, so a relaunch keeps it. `ttl` is the cache
  * length in effect when it was saved (absent before 1.0.3); `savedAt` when it was saved, which
- * ages the entry for the weekly clean-up (absent before 1.0.4).
+ * ages the entry for the weekly clean-up (absent before 1.0.4); `lastRealRequestAt`,
+ * `lastWarmPingAt` and `savings` keep what keep-warm cost and saved (absent before ckw-0zj).
  */
-export type KeepWarmSaved = { lastRequestAt: number; keepWarm: boolean; stopAt: number; ttl?: KeepWarmTtl; savedAt?: number }
+export type KeepWarmSaved = {
+  lastRequestAt: number; keepWarm: boolean; stopAt: number; ttl?: KeepWarmTtl; savedAt?: number
+  lastRealRequestAt?: number; lastWarmPingAt?: number; savings?: KeepWarmSavings
+}
 
 /** One keep-warm ping: when it started, whether the cache still held the conversation, how much it read. */
 export type KeepWarmPing = { at: number; isHit: boolean; read: number }

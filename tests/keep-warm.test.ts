@@ -165,6 +165,37 @@ test('a real answer after the visible ping starts the pings in a row over', asyn
   expect(await line($)).not.toContain('ping ✓')
 })
 
+test('a ping before a relaunch and a return after it: the saving counts and is kept', async ($, on) => {
+  const savings = { pings: 3, pingCost: 15_105, returns: 1, saved: 95_000 }
+  const saved = { ...SAVED_ON, lastRealRequestAt: START - 70 * MINUTE, lastWarmPingAt: START - 10 * MINUTE, savings }
+  const { engine } = stubEngine(on, { store: { 'session:S1': saved } })
+  await start($)
+  expect(await line($)).toEqual('󰁔 ping 10:42 (shows in chat)·󰆼 saved 80k·54k cached·50 min left•••••••••· 󰓛 Stop ')
+  await answer($, engine, READ)
+  expect((engine.store['session:S1'] as { savings: unknown }).savings).toEqual({ pings: 3, pingCost: 15_105, returns: 2, saved: 190_000 })
+})
+
+test('/clear keeps what keep-warm saved this session', async ($, on) => {
+  const { engine, clock } = stubEngine(on)
+  await start($)
+  await answer($, engine, WRITE)
+  await keepwarm($, 'on')
+  await clock.advance(52 * MINUTE)
+  await $.classic.SessionStart({ session_id: 'S1', transcript_path: '/t', cwd: '/work', hook_event_name: 'SessionStart', source: 'clear' } as any)
+  expect(await line($)).toContain('󰆼 cost 5k')
+})
+
+test('a return after /clear is no saved return: the ping warmed the conversation before it', async ($, on) => {
+  const { engine, clock } = stubEngine(on)
+  await start($)
+  await answer($, engine, WRITE)
+  await keepwarm($, 'on')
+  await clock.advance(70 * MINUTE)
+  await $.classic.SessionStart({ session_id: 'S1', transcript_path: '/t', cwd: '/work', hook_event_name: 'SessionStart', source: 'clear' } as any)
+  await answer($, engine, READ)
+  expect(await line($)).toContain('󰆼 cost 5k')
+})
+
 test('a visible ping that fails says why', async ($, on) => {
   const { engine, clock } = stubEngine(on, { store: { 'session:S1': SAVED_ON } })
   await start($)

@@ -31,6 +31,7 @@ export async function finishRequest($: EngineInterface, { turnId, now, previous,
   const isFirst = live.isFirstRequest
   live.isFirstRequest = false
   if (previous > 0 && !isFirst) await observeGap($, now - previous, usage)
+  await save($)
 }
 
 function reachedModel(usage: ModelUsage) {
