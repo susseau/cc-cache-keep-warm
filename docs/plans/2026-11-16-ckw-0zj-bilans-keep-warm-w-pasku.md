@@ -524,7 +524,8 @@ export async function save($: EngineInterface) {
 }
 ```
 
-- w `restoreSaved` zastąp linię `await writeSession($, { isOn: saved.keepWarm, stopAt: saved.stopAt ?? 0 })`:
+- w `restoreSaved` zastąp linię
+  `await writeSession($, { isOn: saved.keepWarm, stopAt: saved.stopAt ?? 0 })`:
 
 ```ts
     await writeSession($, {
@@ -642,8 +643,11 @@ export function savingsSummary(savings: KeepWarmSavings) {
   if (savings.pings > 0) lines.push(savingsSummary(savings))
 ```
 
-`README.md:96` — `| \`/keepwarm\` | Show the state and the last pings |` →
-`| \`/keepwarm\` | Show the state, the last pings and what keep-warm cost and saved in this session |`.
+`README.md:96` — wiersz `/keepwarm` w tabeli komend zastąp tym:
+
+```markdown
+| `/keepwarm` | Show the state, the last pings and what keep-warm cost and saved in this session |
+```
 
 - [ ] **Krok 4: Uruchom, potwierdź pass**
 
