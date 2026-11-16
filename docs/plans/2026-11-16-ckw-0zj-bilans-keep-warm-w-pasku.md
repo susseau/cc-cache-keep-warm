@@ -47,8 +47,10 @@ te trzy pola przez relaunch.
   zależy od: `hooks/savings.ts`
 - `hooks/events/turn.ts` — prawdziwy request zapisuje swój czas i dolicza uratowany powrót;
   zależy od: `hooks/savings.ts`, `hooks/state.ts`, `hooks/session-store.ts`
-- `hooks/line/line-model.ts` — model linii (czysty): co linia mówi i ile kropek paska wypełnia;
-  zmiana: detal bilansu za liczbą pingów i pasek 6 kropek; zależy od: `hooks/savings.ts`, `hooks/format.ts`
+- `hooks/line/bar-model.ts` (nowy) — pasek linii (czysty): liczba kropek i ile z nich wypełnia
+  pozostały czas cache; zależy od: brak
+- `hooks/line/line-model.ts` — treść linii (czysta): detale, czas, ton, przycisk; dochodzi detal
+  bilansu za liczbą pingów; zależy od: `hooks/savings.ts`, `hooks/format.ts`
 - `hooks/session-store.ts` — zapis i odtworzenie trzech pól; zależy od: `hooks/state.ts`,
   `hooks/savings.ts`
 - `hooks/command.ts` — linia bilansu w `statusText`; zależy od: `hooks/savings.ts`,
@@ -69,7 +71,9 @@ te trzy pola przez relaunch.
 
 **Pliki:**
 
+- Utwórz: `hooks/line/bar-model.ts`
 - Utwórz: `hooks/savings.ts`
+- Zmodyfikuj: `hooks/line/line-view.tsx:4`
 - Zmodyfikuj: `types/index.d.ts:6-52`
 - Zmodyfikuj: `hooks/session-snapshot.ts:3-20`
 - Zmodyfikuj: `hooks/state.ts:1-125`
@@ -84,6 +88,7 @@ te trzy pola przez relaunch.
 - Konsumuje: `isCacheHit(usage)` z `hooks/cache-timing.ts`, `tokens(n)` z `hooks/format.ts`,
   `KeepWarmTtl` z `types/index.d.ts`.
 - Produkuje:
+  - `BAR_CELLS` i `filledCells({ isWarm, remaining, ttlMs })` w `hooks/line/bar-model.ts`;
   - typ `KeepWarmSavings = { pings: number; pingCost: number; returns: number; saved: number }`
     w `types/index.d.ts`;
   - w `hooks/savings.ts`: `NO_SAVINGS`, `requestCost(usage)`, `addPing(savings, usage)`,
@@ -123,7 +128,60 @@ cyklem testów.
 **Wykonawca (rekomendacja):** claude / standard — typowa implementacja z testami w znanym
 wzorcu repo.
 
-- [ ] **Krok 1: Napisz failing testy**
+- [ ] **Krok 1: Wydziel pasek do `hooks/line/bar-model.ts` (refactor bez zmiany zachowania)**
+
+`line-model.ts` decyduje o treści linii, a liczba kropek paska to osobna decyzja; wydziel ją,
+zanim plik dostanie detal bilansu.
+
+`hooks/line/bar-model.ts` (nowy):
+
+```ts
+// The line's bar: blocks that empty over the cache's life, the one gauge of the time left;
+// filled blocks in the line's tone, outlined blocks for the time already gone.
+export const BAR_CELLS = 10
+
+export type BarTime = { isWarm: boolean, remaining: number, ttlMs: number }
+
+// At least one block while the cache is warm, none once it is cold.
+export function filledCells({ isWarm, remaining, ttlMs }: BarTime) {
+  return isWarm ? Math.max(1, Math.ceil((remaining / ttlMs) * BAR_CELLS)) : 0
+}
+```
+
+`hooks/line/line-model.ts`:
+
+- usuń komentarz i stałą `BAR_CELLS` (linie 6-8);
+- import: `import { filledCells } from './bar-model'`;
+- w `lineModel` zastąp pole `filledCells` (wyrażenie z `BAR_CELLS`) linią:
+
+```ts
+    filledCells: filledCells(countdown),
+```
+
+`hooks/line/line-view.tsx:4` — zastąp
+`import { BAR_CELLS, type LineModel, type LineTone } from './line-model'` dwoma importami:
+
+```ts
+import { BAR_CELLS } from './bar-model'
+import type { LineModel, LineTone } from './line-model'
+```
+
+`.claude/CLAUDE.md`, „Code layout”: w liście czystych modułów dopisz `bar-model.ts` za
+`line-model.ts`, a punkt `line/` zmień na:
+
+```markdown
+- `line/`: `line-model.ts` decides what the line says (pure), `bar-model.ts` how full its bar is (pure), `line-view.tsx` draws it.
+```
+
+- [ ] **Krok 2: Uruchom testy, zacommituj refactor**
+
+```bash
+claude plugin test . && git add hooks/line/bar-model.ts hooks/line/line-model.ts hooks/line/line-view.tsx .claude/CLAUDE.md && git commit -m "ckw-0zj: refactor: pasek linii w osobnym module bar-model.ts"
+```
+
+Oczekiwany output: PASS wszystkich testów bez zmiany asercji; commit refactoru.
+
+- [ ] **Krok 3: Napisz failing testy**
 
 W `tests/decisions.test.ts` dopisz import pod importem `../hooks/command`:
 
@@ -233,7 +291,7 @@ wstrzymuje keep-warm, a koszt zostaje w linii.)
 (Odpowiedź o 10:00, ping o 10:52, powrót o 11:10: 70 min od ostatniego prawdziwego requestu,
 dłużej niż godzinny cache, a cache ciepły. Zysk 1,9 · 50k = 95k, minus 5 035 za ping, daje 90k.)
 
-- [ ] **Krok 2: Uruchom, potwierdź fail**
+- [ ] **Krok 4: Uruchom, potwierdź fail**
 
 ```bash
 claude plugin test .
@@ -242,7 +300,7 @@ claude plugin test .
 Oczekiwany output: FAIL — brak modułu `../hooks/savings`, a w `keep-warm.test.ts` linie bez
 „cost 5k” i „saved 90k”.
 
-- [ ] **Krok 3: Zaimplementuj minimalnie**
+- [ ] **Krok 5: Zaimplementuj minimalnie**
 
 `types/index.d.ts` — pod typem `KeepWarmPing` dopisz:
 
@@ -450,7 +508,7 @@ function savingsDetails({ isOn, savings }: SessionSnapshot) {
 - What keep-warm saved (ckw-0zj, owner's choices 2026-11-16): a ping costs its whole request (input 1, cache read 0.1, 1-hour write 2, output 5, in input-token equivalents); a real request after a break longer than the cache, with a warm ping since the last real one, that finds the cache warm saves 1.9x what it read. The line shows the net ("saved 90k", "cost 5k") after the ping count, while keep-warm is on (paused included); `/keepwarm status` shows the whole account once keep-warm has pinged. The account lives for the whole session, through `/clear`, compactions and relaunches.
 ```
 
-- [ ] **Krok 4: Uruchom, potwierdź pass**
+- [ ] **Krok 6: Uruchom, potwierdź pass**
 
 ```bash
 claude plugin test . && claude plugin validate --strict ./.claude-plugin/plugin.json
@@ -458,7 +516,7 @@ claude plugin test . && claude plugin validate --strict ./.claude-plugin/plugin.
 
 Oczekiwany output: PASS wszystkich testów; walidacja bez błędów.
 
-- [ ] **Krok 5: Commit**
+- [ ] **Krok 7: Commit**
 
 ```bash
 git add hooks/savings.ts types/index.d.ts hooks/session-snapshot.ts hooks/state.ts hooks/events/turn.ts hooks/line/line-model.ts tests/decisions.test.ts tests/keep-warm.test.ts README.md .claude/CLAUDE.md && git commit -m "ckw-0zj: bilans keep-warm w pasku (koszt pingów, uratowane powroty)"
@@ -733,7 +791,7 @@ git add hooks/command.ts tests/decisions.test.ts README.md && git commit -m "ckw
 
 **Pliki:**
 
-- Zmodyfikuj: `hooks/line/line-model.ts:6-8`
+- Zmodyfikuj: `hooks/line/bar-model.ts` (`BAR_CELLS`)
 - Zmodyfikuj: `README.md:106`
 - Zmodyfikuj: `.claude/CLAUDE.md` (sekcja „Behaviour agreed with the owner”, punkt „The line”)
 - Test: `tests/line.test.ts`, `tests/keep-warm.test.ts`, `tests/decisions.test.ts`
@@ -746,7 +804,7 @@ git add hooks/command.ts tests/decisions.test.ts README.md && git commit -m "ckw
 
 **Wzorce:**
 
-- `hooks/line/line-model.ts:43` — `filledCells` = `max(1, ceil(pozostało / TTL · BAR_CELLS))` przy
+- `hooks/line/bar-model.ts` (`filledCells`, Task 1) — `max(1, ceil(pozostało / TTL · BAR_CELLS))` przy
   ciepłym cache, 0 przy zimnym.
 
 **Reguły stosowalne:**
@@ -799,7 +857,7 @@ Oczekiwany output: FAIL — linie mają jeszcze 10 kropek, `filledCells` wynosi 
 
 - [ ] **Krok 3: Zaimplementuj minimalnie**
 
-`hooks/line/line-model.ts:8`: `export const BAR_CELLS = 10` → `export const BAR_CELLS = 6`.
+`hooks/line/bar-model.ts`: `export const BAR_CELLS = 10` → `export const BAR_CELLS = 6`.
 
 `README.md:106`: `**40 min left •••••••···**` → `**40 min left ••••··**`.
 
@@ -817,5 +875,5 @@ Oczekiwany output: PASS wszystkich testów.
 - [ ] **Krok 5: Commit**
 
 ```bash
-git add hooks/line/line-model.ts tests/line.test.ts tests/keep-warm.test.ts tests/decisions.test.ts README.md .claude/CLAUDE.md && git commit -m "ckw-0zj: krótszy pasek, 6 kropek"
+git add hooks/line/bar-model.ts tests/line.test.ts tests/keep-warm.test.ts tests/decisions.test.ts README.md .claude/CLAUDE.md && git commit -m "ckw-0zj: krótszy pasek, 6 kropek"
 ```
