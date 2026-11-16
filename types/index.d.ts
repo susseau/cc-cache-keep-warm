@@ -1,12 +1,24 @@
 /**
  * What the mod remembers per session id in `$.store`, so a relaunch keeps it. `ttl` is the cache
  * length in effect when it was saved (absent before 1.0.3); `savedAt` when it was saved, which
- * ages the entry for the weekly clean-up (absent before 1.0.4).
+ * ages the entry for the weekly clean-up (absent before 1.0.4); `lastRealRequestAt`,
+ * `lastWarmPingAt` and `savings` keep what keep-warm cost and saved (absent before ckw-0zj).
  */
-export type KeepWarmSaved = { lastRequestAt: number; keepWarm: boolean; stopAt: number; ttl?: KeepWarmTtl; savedAt?: number }
+export type KeepWarmSaved = {
+  lastRequestAt: number; keepWarm: boolean; stopAt: number; ttl?: KeepWarmTtl; savedAt?: number
+  lastRealRequestAt?: number; lastWarmPingAt?: number; savings?: KeepWarmSavings
+}
 
 /** One keep-warm ping: when it started, whether the cache still held the conversation, how much it read. */
 export type KeepWarmPing = { at: number; isHit: boolean; read: number }
+
+/**
+ * What keep-warm cost and saved in this session, in input-token equivalents (an input token 1, a
+ * cache read 0.1, a 1-hour cache write 2, an output token 5). `pingCost`: every ping's whole
+ * request; `returns`: real requests after a break longer than the cache that found it warm thanks
+ * to the pings; `saved`: what re-writing their cache would have cost more than reading it.
+ */
+export type KeepWarmSavings = { pings: number; pingCost: number; returns: number; saved: number }
 
 /**
  * How long the main conversation's cache lives, and why: from a setting, from the plan, or
@@ -49,6 +61,12 @@ declare module 'claude-code' {
       pingError: string
       /** True while the conversation fills too much of the context window for a visible ping. */
       nearlyFull: boolean
+      /** When the main conversation's last request that was not a ping started (ms since epoch); 0 = none yet. */
+      lastRealRequestAt: number
+      /** When the last ping that found the cache warm started (ms since epoch); 0 = none yet. */
+      lastWarmPingAt: number
+      /** What keep-warm cost and saved in this session; never reset while the session lives. */
+      savings: KeepWarmSavings
     }
   }
 }

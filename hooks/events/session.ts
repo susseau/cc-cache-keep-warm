@@ -50,9 +50,13 @@ export async function carryOnResumed($: EngineInterface, { secondsSinceLastRespo
 }
 
 // The conversation starts over (cleared, or replaced by its summary): nothing of it is cached
-// until the next request writes it.
+// until the next request writes it, and no ping has kept the new one warm yet. What keep-warm
+// cost and saved stays for the session.
 export async function startOver($: EngineInterface) {
-  await writeSession($, { lastRequestAt: 0, pings: [], sawResponse: false, contextTokens: 0, pingError: '', now: await $.clock.now() })
+  await writeSession($, {
+    lastRequestAt: 0, pings: [], sawResponse: false, contextTokens: 0, pingError: '', now: await $.clock.now(),
+    lastRealRequestAt: 0, lastWarmPingAt: 0,
+  })
   live.roomChecked = false
   await saveIfRestored($)
 }

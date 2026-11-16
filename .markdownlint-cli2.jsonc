@@ -1,0 +1,14 @@
+{
+  "config": {
+    "extends": "./.markdownlint.jsonc"
+  },
+  "gitignore": true,
+  "ignores": [
+    ".beads",
+    ".worktrees",
+    "node_modules",
+    "docs/archive",
+    "data",
+    "seed-data"
+  ]
+}

@@ -1,8 +1,9 @@
 // Sending a ping: the invisible one (a fork of the last request) and the visible fallback.
 import type { EngineInterface, ModelUsage } from 'claude-code'
 
+import { accountPing } from '../savings-account'
 import { save } from '../session-store'
-import { appendPing, live, readSnapshot, writeSession } from '../state'
+import { live, readSnapshot, writeSession } from '../state'
 import { observeGap } from '../ttl/cache-length'
 import { isTooFullForVisiblePing } from './decide-ping'
 
@@ -49,7 +50,7 @@ type AnsweredPing = { startedAt: number, lastRequestAt: number, usage: ModelUsag
 // A ping that found the cache cold proves the cache is shorter than assumed, which pauses
 // keep-warm (another cold ping would only pay for a full re-write again).
 async function recordPing($: EngineInterface, { startedAt, lastRequestAt, usage }: AnsweredPing) {
-  await appendPing($, startedAt, usage)
+  await accountPing($, startedAt, usage)
   await observeGap($, startedAt - lastRequestAt, usage)
   await writeSession($, { lastRequestAt: startedAt })
   await save($)

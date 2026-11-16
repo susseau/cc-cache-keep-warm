@@ -1,14 +1,14 @@
 // What the line above the prompt says, decided from the session's values alone.
 import { HOUR_MS, isLongEnoughToKeepWarm, MINUTE_MS, PING_LEAD_MS } from '../cache-timing'
 import { cacheLength, clockTime, minutes, timeLeft, tokens } from '../format'
+import { netSaving } from '../savings'
 import { needsVisiblePing, type SessionSnapshot } from '../session-snapshot'
+import { filledCells } from './bar-model'
 
-// Blocks that empty over the cache's life, the one gauge of the time left: filled blocks in the
-// line's tone, outlined blocks for the time already gone.
-export const BAR_CELLS = 10
 // Nerd Font icons, as in the aby panel: the next ping and the clock time the cache expires.
 const NEXT_ICON = '󰁔'
 const EXPIRES_ICON = '󰔟'
+const SAVINGS_ICON = '󰆼'
 // With keep-warm off, the band names what is at stake once this little time is left.
 const EXPIRING_MS = 10 * MINUTE_MS
 const WAITS_TEXT = 'keep-warm starts after your next message'
@@ -40,10 +40,10 @@ export function lineModel(session: SessionSnapshot): LineModel {
   const canKeepWarm = isLongEnoughToKeepWarm(ttl)
   const isKeepingWarm = isOn && canKeepWarm && !session.pingError && !isBlocked(session)
   return {
-    filledCells: countdown.isWarm ? Math.max(1, Math.ceil((countdown.remaining / countdown.ttlMs) * BAR_CELLS)) : 0,
+    filledCells: filledCells(countdown),
     tone: isKeepingWarm ? 'keeping' : isOn ? 'stalled' : 'off',
     main: lastRequestAt === 0 ? 'nothing cached yet' : countdown.isWarm ? timeLeft(countdown.remaining) : `cold since ${clockTime(countdown.expiresAt)}`,
-    details: [...waitingDetails(session, countdown), ...expiryDetails(session, countdown, isKeepingWarm), ...keepWarmDetails(session, countdown), ...cachedDetails(session, countdown, isKeepingWarm)],
+    details: [...waitingDetails(session, countdown), ...expiryDetails(session, countdown, isKeepingWarm), ...keepWarmDetails(session, countdown), ...savingsDetails(session), ...cachedDetails(session, countdown, isKeepingWarm)],
     canToggle: isOn || !ttl || canKeepWarm || ttl.reason === 'overage' || ttl.reason === 'observed',
     isOn,
   }
@@ -102,6 +102,14 @@ function pingCountDetails({ pings }: SessionSnapshot) {
   const lastPing = pings[pings.length - 1]
   if (!lastPing) return []
   return [`${pings.length} ping${pings.length === 1 ? '' : 's'} ${lastPing.isHit ? '✓' : '✗'}`]
+}
+
+// What keep-warm has saved in this session, once it has pinged; while no return has paid the
+// pings back, what they cost. Shown while keep-warm is on, paused included.
+function savingsDetails({ isOn, savings }: SessionSnapshot) {
+  if (!isOn || savings.pings === 0) return []
+  const net = netSaving(savings)
+  return [`${SAVINGS_ICON} ${net >= 0 ? `saved ${tokens(net)}` : `cost ${tokens(-net)}`}`]
 }
 
 function cachedDetails({ contextTokens, lastRequestAt }: SessionSnapshot, { isWarm, remaining, expiresAt }: Countdown, isKeepingWarm: boolean) {

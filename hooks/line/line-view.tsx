@@ -1,7 +1,8 @@
 // The line above the prompt, drawn from a ready LineModel.
 import type { EngineInterface } from 'claude-code'
 
-import { BAR_CELLS, type LineModel, type LineTone } from './line-model'
+import { BAR_CELLS } from './bar-model'
+import type { LineModel, LineTone } from './line-model'
 
 const BAR_FULL = '•'
 const BAR_EMPTY = '·'

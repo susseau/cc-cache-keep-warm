@@ -1,0 +1,12 @@
+// Repo style: README.md and .claude/CLAUDE.md keep one paragraph per line, inline HTML and bare
+// URLs; docs/ (plans written by the aby workflow) wraps at 100 columns, see docs/.markdownlint.jsonc.
+{
+  "default": true,
+  "MD013": false,
+  "MD033": false,
+  "MD034": false,
+  "MD041": false,
+  "MD024": {
+    "siblings_only": true
+  }
+}

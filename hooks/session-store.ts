@@ -2,6 +2,7 @@ import type { EngineInterface } from 'claude-code'
 
 import type { KeepWarmSaved, KeepWarmTtl } from '../types'
 import { HOUR_MS } from './cache-timing'
+import { NO_SAVINGS } from './savings'
 import { isRestored, live, markRestored, readSnapshot, writeSession } from './state'
 
 // $.store is shared by every session and survives an app relaunch, which empties $.state: each
@@ -15,8 +16,8 @@ const PLAN_TTL_KEY = 'plan-ttl'
 
 export async function save($: EngineInterface) {
   if (!live.storeKey) return
-  const { lastRequestAt, isOn: keepWarm, stopAt, ttl } = await readSnapshot($)
-  const saved: KeepWarmSaved = { lastRequestAt, keepWarm, stopAt, ttl, savedAt: await $.clock.now() }
+  const { lastRequestAt, isOn: keepWarm, stopAt, ttl, lastRealRequestAt, lastWarmPingAt, savings } = await readSnapshot($)
+  const saved: KeepWarmSaved = { lastRequestAt, keepWarm, stopAt, ttl, lastRealRequestAt, lastWarmPingAt, savings, savedAt: await $.clock.now() }
   await $.store.set(live.storeKey, saved)
 }
 
@@ -43,7 +44,13 @@ export async function restoreSaved($: EngineInterface) {
     if (saved.ttl && typeof saved.ttl.ms === 'number') live.savedTtl = saved.ttl
     const { lastRequestAt: last } = await readSnapshot($)
     if (saved.lastRequestAt > last) await writeSession($, { lastRequestAt: saved.lastRequestAt })
-    await writeSession($, { isOn: saved.keepWarm, stopAt: saved.stopAt ?? 0 })
+    await writeSession($, {
+      isOn: saved.keepWarm,
+      stopAt: saved.stopAt ?? 0,
+      lastRealRequestAt: saved.lastRealRequestAt ?? 0,
+      lastWarmPingAt: saved.lastWarmPingAt ?? 0,
+      savings: saved.savings ?? NO_SAVINGS,
+    })
   } else live.isUnseen = true
   await markRestored($)
   await save($)

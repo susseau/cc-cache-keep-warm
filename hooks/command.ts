@@ -1,9 +1,11 @@
 // /keepwarm: on [3h | until 18:00], off, or status.
 import type { EngineInterface } from 'claude-code'
 
+import type { KeepWarmSavings } from '../types'
 import { HOUR_MS, isTooShortToKeepWarm, KEEP_WARM_MIN_TTL_MS, MINUTE_MS, PING_LEAD_MS } from './cache-timing'
 import { cacheLength, clockTime, minutes, tokens } from './format'
 import { switchOff, switchOn } from './keep-warm-switch'
+import { netSaving } from './savings'
 import { needsVisiblePing, type SessionSnapshot } from './session-snapshot'
 import { live, readSnapshot } from './state'
 
@@ -45,7 +47,7 @@ export function parseStop(text: string, now: number) {
 }
 
 export function statusText(session: SessionSnapshot, maxPings: number) {
-  const { isOn, stopAt, ttl, pings } = session
+  const { isOn, stopAt, ttl, pings, savings } = session
   const lines = [
     isOn
       ? `Keep-warm on${stopAt ? ` until ${clockTime(stopAt)}` : ` (stops itself after ${maxPings} pings in a row)`}: about ${minutes(PING_LEAD_MS)} min before the cache would expire, it re-reads the conversation from cache in the background. A cold cache is never pinged.`
@@ -54,8 +56,18 @@ export function statusText(session: SessionSnapshot, maxPings: number) {
   if (isOn && needsVisiblePing(session)) lines.push('Claude Code can repeat this conversation invisibly only once it has answered since the app started, so the next ping is a short message in the chat.')
   if (ttl) lines.push(`This session's cache lasts ${cacheLength(ttl.ms)} (${ttl.reason === 'observed' ? 'seen expiring sooner than expected' : ttl.reason}).`)
   if (isTooShortToKeepWarm(ttl)) lines.push(`Keep-warm only pings a cache of ${minutes(KEEP_WARM_MIN_TTL_MS)} min or longer.`)
+  if (savings.pings > 0) lines.push(savingsLine(savings))
   for (const p of pings.slice(-HISTORY_SHOWN)) {
     lines.push(`${clockTime(p.at)} · ${p.isHit ? `read ${tokens(p.read)} from cache` : 'found the cache cold'}`)
   }
   return lines.join('\n')
+}
+
+// The session's whole account: what the pings cost, what the returns they kept warm saved, the net.
+function savingsLine(savings: KeepWarmSavings) {
+  const net = netSaving(savings)
+  const pings = `${savings.pings} ping${savings.pings === 1 ? '' : 's'} cost ${tokens(savings.pingCost)}`
+  const returns = `${savings.returns} return${savings.returns === 1 ? '' : 's'} to a warm cache saved ${tokens(savings.saved)}`
+  const result = net >= 0 ? `${tokens(net)} saved` : `${tokens(-net)} spent`
+  return `This session: ${pings}, ${returns}: ${result} (input-token equivalents).`
 }

@@ -93,9 +93,9 @@ Click **󰐊 Warm** on the line, or type a command:
 | `/keepwarm 3h` | Keep it warm for 3 hours |
 | `/keepwarm until 18:00` | Keep it warm until 18:00 |
 | `/keepwarm off` | Stop (or click **󰓛 Stop**) |
-| `/keepwarm` | Show the state and the last pings |
+| `/keepwarm` | Show the state, the last pings and what keep-warm cost and saved in this session |
 
-Keep-warm is **off by default** and you switch it **per session**: only the sessions you want are kept warm. To have it on in every new session, turn on the **On in new sessions** setting. It stops by itself after about 7 hours (8 pings in a row, the **Pings in a row** setting) unless you gave it a time: each ping costs about a twentieth of what one re-write does, and the longer the break, the less likely it ends soon.
+Keep-warm is **off by default** and you switch it **per session**: only the sessions you want are kept warm. To have it on in every new session, turn on the **On in new sessions** setting. It stops by itself after about 7 hours (8 pings in a row, the **Pings in a row** setting) unless you gave it a time: each ping that finds the cache warm costs about a nineteenth of what one return to a warm cache saves (one that finds it cold re-writes it and can cost more than a return saves), and the longer the break, the less likely it ends soon.
 
 ### Reading the line
 
@@ -103,11 +103,12 @@ The line sits on the right, above the prompt. Its icons come from a [Nerd Font](
 
 | You see | It means |
 | --- | --- |
-| **40 min left •••••••···** | How much of the cache's life is left. The bar is **blue** while keep-warm is on and able to ping, **mustard** while it is on but cannot ping (paused, failed, waiting), grey when it is off. Empty once the cache has expired (**cold since 14:12**). |
+| **40 min left ••••··** | How much of the cache's life is left. The bar is **blue** while keep-warm is on and able to ping, **mustard** while it is on but cannot ping (paused, failed, waiting), grey when it is off. Empty once the cache has expired (**cold since 14:12**). |
 | **nothing cached yet** | A new conversation, or one you just cleared or compacted: nothing of it is cached until your next message, and the countdown starts with that. |
 | **󰔟 expires 14:12** | The clock time the cache expires if nothing happens. Not shown while keep-warm is holding the cache: the next ping matters then. |
 | **󰁔 ping 14:07** | When keep-warm will read the cache next. **(shows in chat)** means this ping is a short visible message, because the session hasn't answered since the app restarted. |
 | **3 pings ✓** | Pings so far, and whether the last one found the cache warm (✓) or cold (✗). |
+| **󰆼 saved 90k** | What keep-warm has saved in this session so far, once it has pinged: each time you came back after a break longer than the cache and found it warm, it saved re-writing your conversation (a re-write costs 2x, a cache read 0.1x), minus what every ping cost. In input-token equivalents. **󰆼 cost 5k** while no return has paid the pings back yet. Shown while keep-warm is on. |
 | **conversation nearly full: keep-warm waits for you** | After a restart the next ping has to be the visible one, and Claude Code re-sends your project's instruction files (`CLAUDE.md`, the files it imports, `MEMORY.md`) with it. Here those would not fit next to the conversation: the ping would fail or make Claude Code compact the conversation. So keep-warm waits for your own next message. |
 | **ping failed: …** | The last ping never reached the model, with the reason Claude Code gave. "Prompt is too long" means the conversation is over the model's limit: run `/compact` in that session. The cache then expires normally. |
 | **keep-warm starts after your next message** | Keep-warm is on but doesn't know your cache length yet. That only happens before the first answer after you install the mod. |
@@ -199,7 +200,7 @@ The mod asks Claude Code to send this session's last request again, with one lin
 
 After an app restart, Claude Code can repeat a session's request this way only once the session has answered again. Until then the ping is a short message the mod sends into the chat instead (the `$.prompt.submit` call): `Keep-warm ping from the Cache Keep-Warm mod. Reply with exactly "ok" and nothing else. Use no tools.` Claude answers "ok", and from then on the pings are invisible again. Same destination, same account, and the same rule: only in the last minutes before the cache would expire, never once it is cold.
 
-The mod itself never reads what your conversation says: from each request it only takes the usage figures (how many tokens were read from the cache or written to it).
+The mod itself never reads what your conversation says: from each request it only takes the usage figures (how many tokens were read from the cache, written to it, sent and answered).
 
 ### The tools it calls itself
 
@@ -215,7 +216,7 @@ With the setting **Mark the session title** off, the mod never adds the mark; it
 ### What it reads
 
 - **Your Claude Code settings**, for `promptCacheTtl` only, and three environment variables: `FORCE_PROMPT_CACHING_5M`, `CLAUDE_CODE_PROMPT_CACHE_TTL` and `ENABLE_PROMPT_CACHING_1H`, to know how long your cache lasts. The mod asks Claude Code for that one setting by name, so it never receives your other settings, credentials or API keys.
-- **This session's figures** from Claude Code: the conversation's size, the cache tokens of each request, and whether your plan's usage limits are reported (which tells a subscription from an API key). After a restart, while the next ping would be the visible one, also the free space left in the context window and the size of the instruction files (their token counts only, never their text), to check the visible ping fits.
+- **This session's figures** from Claude Code: the conversation's size, the cache, input and output tokens of each request (to count what keep-warm cost and saved), and whether your plan's usage limits are reported (which tells a subscription from an API key). After a restart, while the next ping would be the visible one, also the free space left in the context window and the size of the instruction files (their token counts only, never their text), to check the visible ping fits.
 - **When you reopen a session**, what Claude Code tells mods at that moment: how long ago the session's last answer came and how big the conversation is. That lets the countdown carry on before your first message.
 - **The clock.**
 
@@ -223,7 +224,7 @@ It checks these every 15 seconds, on your computer, and sends none of them anywh
 
 ### What it keeps
 
-Per session, in Claude Code's plugin storage on your computer: the time of the last request, whether keep-warm is on, and the stop time you gave it. A session untouched for a week is forgotten. Shared by your sessions, it also keeps the last cache length your plan showed (one hour or five minutes), so a session you reopen knows it before its first answer.
+Per session, in Claude Code's plugin storage on your computer: the time of the last request (and of the last one that was not a ping, and of the last ping that found the cache warm), whether keep-warm is on, the stop time you gave it, and what keep-warm cost and saved in it (token counts only). A session untouched for a week is forgotten. Shared by your sessions, it also keeps the last cache length your plan showed (one hour or five minutes), so a session you reopen knows it before its first answer.
 
 ### The events it hooks
 
