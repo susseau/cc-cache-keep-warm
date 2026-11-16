@@ -93,7 +93,7 @@ Click **󰐊 Warm** on the line, or type a command:
 | `/keepwarm 3h` | Keep it warm for 3 hours |
 | `/keepwarm until 18:00` | Keep it warm until 18:00 |
 | `/keepwarm off` | Stop (or click **󰓛 Stop**) |
-| `/keepwarm` | Show the state and the last pings |
+| `/keepwarm` | Show the state, the last pings and what keep-warm cost and saved in this session |
 
 Keep-warm is **off by default** and you switch it **per session**: only the sessions you want are kept warm. To have it on in every new session, turn on the **On in new sessions** setting. It stops by itself after about 7 hours (8 pings in a row, the **Pings in a row** setting) unless you gave it a time: each ping that finds the cache warm costs about a nineteenth of what one return to a warm cache saves (one that finds it cold re-writes it and can cost more than a return saves), and the longer the break, the less likely it ends soon.
 
