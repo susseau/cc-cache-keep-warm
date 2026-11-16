@@ -83,8 +83,10 @@ taskami, commitem `0bdfc87`: `.markdownlint.jsonc` wyłącza MD013, MD033, MD034
 - `tests/keep-warm.test.ts` — dowodzi bilansu na stub engine: ping, powrót, pauza, relaunch,
   `/clear`; zależy od: `tests/engine.ts`
 - `tests/line.test.ts` — asercje linii z paskiem 6 kropek; zależy od: `tests/engine.ts`
-- `README.md` — wiersz linii, `/keepwarm`, „What it reads”, „What it keeps”, przykład paska;
-  zależy od: brak
+- `hooks/cache-timing.ts` — komentarz progu opłacalności przy `DEFAULT_MAX_PINGS`; zależy od:
+  brak
+- `README.md` — wiersz linii, `/keepwarm`, „What it reads”, „What it keeps”, przykład paska,
+  koszt pingu względem powrotu; zależy od: brak
 - `.claude/CLAUDE.md` — `savings.ts` w układzie kodu, uzgodnione zachowanie bilansu, 6 kropek;
   zależy od: brak
 
@@ -106,7 +108,8 @@ taskami, commitem `0bdfc87`: `.markdownlint.jsonc` wyłącza MD013, MD033, MD034
 - Zmodyfikuj: `hooks/events/turn.ts`
 - Zmodyfikuj: `hooks/register.tsx:8`
 - Zmodyfikuj: `hooks/line/line-model.ts` (import, `keepWarmDetails`, nowa `savingsDetails`)
-- Zmodyfikuj: `README.md:100-115`, `README.md:202`, `README.md:218`
+- Zmodyfikuj: `README.md:98`, `README.md:100-115`, `README.md:202`, `README.md:218`
+- Zmodyfikuj: `hooks/cache-timing.ts:21-24` (komentarz)
 - Zmodyfikuj: `.claude/CLAUDE.md` (sekcje „Code layout” i „Behaviour agreed with the owner”)
 - Utwórz test: `tests/savings.test.ts`
 - Test: `tests/decisions.test.ts` (helper `snapshot`), `tests/keep-warm.test.ts`
@@ -588,8 +591,19 @@ function savingsDetails({ isOn, savings }: SessionSnapshot) {
 }
 ```
 
+`hooks/cache-timing.ts:21-24`, komentarz nad `DEFAULT_MAX_PINGS` zastąp:
+
+```ts
+// Without an explicit stop time, keep-warm stops itself after this many pings in a row (the
+// `max_pings` option; 8 by default, ~7 h). A ping reads the cache at 0.1x its size, a return to a
+// warm cache saves 1.9x (a 2x re-write less the 0.1x read): about 19 pings is where pinging stops
+// paying even for a sure return, and the longer the break, the less likely the return.
+```
+
 `README.md`:
 
+- linia 98: `each ping costs about a twentieth of what one re-write does` →
+  `each ping costs about a nineteenth of what one return to a warm cache saves`;
 - w tabeli „Reading the line”, pod wierszem `**3 pings ✓**`:
 
 ```markdown
@@ -634,7 +648,7 @@ Oczekiwany output: PASS wszystkich testów; walidacja bez błędów.
 - [ ] **Krok 9: Commit**
 
 ```bash
-git add hooks/savings.ts hooks/savings-account.ts hooks/ping/ping.ts types/index.d.ts hooks/session-snapshot.ts hooks/state.ts hooks/events/request.ts hooks/line/line-model.ts tests/decisions.test.ts tests/savings.test.ts tests/keep-warm.test.ts README.md .claude/CLAUDE.md && git commit -m "ckw-0zj: bilans keep-warm w pasku (koszt pingów, uratowane powroty)"
+git add hooks/cache-timing.ts hooks/savings.ts hooks/savings-account.ts hooks/ping/ping.ts types/index.d.ts hooks/session-snapshot.ts hooks/state.ts hooks/events/request.ts hooks/line/line-model.ts tests/decisions.test.ts tests/savings.test.ts tests/keep-warm.test.ts README.md .claude/CLAUDE.md && git commit -m "ckw-0zj: bilans keep-warm w pasku (koszt pingów, uratowane powroty)"
 ```
 
 ---
