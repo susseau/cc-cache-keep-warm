@@ -2,10 +2,10 @@
 
 ## Cel
 
-Keep-warm nie pinguje w ustalonych godzinach (domyślnie 22:00–09:00, czas lokalny). Pingi w nocy
+Keep-warm nie pinguje w ustalonych godzinach (cisza = godziny bez pingów; domyślnie 21:30–08:00, czas lokalny, zakres właściciela). Pingi w nocy
 i w porzuconych sesjach to główna strata: kalibracja na transkryptach 1.09–16.11.2026 (377 sesji,
 `tmp/ckw-model/simulate.py`) daje przy oknie 22–9 oszczędność 5,4 mln tokenów-ekwiwalentów/tydz.
-przy 8 pingach w serii (2,2 mln bez okna) i 5,7 mln przy 6. Przy okazji (ckw-x46) sprawdzenie
+przy 8 pingach w serii (2,2 mln bez okna) i 5,7 mln przy 6. Zakres dobiera użytkownik; podpowiedź z historii to osobny ticket (ckw-hs6). Przy okazji (ckw-x46) sprawdzenie
 stanu co minutę zamiast co 15 s: lżej, a testy limitu pingów mieszczą się w 5 s kitu.
 
 Sukces: żaden ping w oknie ciszy bez jawnego czasu stopu; linia mówi o tym, zanim ping by
@@ -27,6 +27,9 @@ wypadł; rano keep-warm działa dalej bez ręcznego włączania.
 - Pingowanie po końcu ciszy (cache jest wtedy zimny; reguła „nigdy nie pinguj zimnego cache”).
 - Jednorazowy timer na najbliższy termin zamiast ticku.
 - Różne okna dla dni tygodnia.
+- Podpowiedź zakresu z analizy historii (ckw-hs6).
+- Zapas przed ciszą: cisza to dokładnie godziny bez pingów, a ping tuż przed nią albo tuż po niej
+  (do ciepłego cache) jest poprawny.
 
 ## Global constraints
 
@@ -44,30 +47,29 @@ wypadł; rano keep-warm działa dalej bez ręcznego włączania.
 
 - `quiet_hours`: boolean, tytuł „Quiet hours”, domyślnie `true`. Opis: bez czasu stopu keep-warm
   nie pinguje w tych godzinach; cache wygasa, a po Twojej następnej wiadomości keep-warm działa dalej.
-- `quiet_range`: string, tytuł „Quiet hours range”, domyślnie `"22:00-09:00"`, czas lokalny,
+- `quiet_range`: string, tytuł „Quiet hours range”, domyślnie `"21:30-08:00"`, czas lokalny,
   `HH:MM-HH:MM`, może przechodzić przez północ.
 - `max_pings`: domyślnie 6; opis „6 is about 5 hours”.
 
-`register.tsx` czyta je do `live` (jak `max_pings`): `live.quiet` = zakres albo `null` (cisza
-wyłączona). `DEFAULT_MAX_PINGS = 6` w `cache-timing.ts`.
+`register.tsx` czyta je do `live` (jak `max_pings`): `live.quiet: QuietHours`. `DEFAULT_MAX_PINGS = 6` w `cache-timing.ts`.
 
 ### Zakres ciszy (nowy czysty moduł `hooks/quiet-hours.ts`)
 
-- `quietRange(isOn: unknown, range: unknown): QuietRange | null`: `isOn === false` → `null`;
+- `QuietHours = { isOn: false } | { isOn: true, startMin, endMin }` (minuty od północy).
+- `quietHours(isOn: unknown, range: unknown): QuietHours`: `isOn === false` → `{ isOn: false }`;
   `range` niebędący tekstem `H:MM-H:MM` / `HH:MM-HH:MM` z godzinami 0–23 i minutami 0–59 (spacje
-  wokół myślnika dozwolone) albo z równym początkiem i końcem → domyślny 22:00–09:00.
-  `QuietRange = { startMin, endMin }` (minuty od północy).
-- `isQuiet(ms, range)`: lokalna minuta doby (`Date#getHours/getMinutes`, jak `clockTime`) w
+  wokół myślnika dozwolone) albo z równym początkiem i końcem → domyślny 21:30–08:00.
+- `isQuiet(ms, quiet)`: `false` przy `isOn: false`; inaczej lokalna minuta doby (`Date#getHours/getMinutes`, jak `clockTime`) w
   `[startMin, endMin)`; gdy `startMin > endMin`, okno przez północ: `≥ startMin || < endMin`.
-- `quietLabel(range)`: `"22:00–09:00"` do linii i statusu; `quietEnd(range)`: `"09:00"`.
+- `quietLabel(quiet)`: `"21:30–08:00"` do statusu; `quietEnd(quiet)`: `"08:00"` do linii.
 
 ### Decyzja (`hooks/ping/decide-ping.ts`)
 
-`PingCheck` dostaje `quiet: QuietRange | null`; `PingStep` dostaje `'quiet'`. Kolejność:
+`PingCheck` dostaje `quiet: QuietHours`; `PingStep` dostaje `'quiet'`. Kolejność:
 
 1. `stop-at-time` (bez zmian);
 2. poza oknem pingu albo przed `pendingUntil` → `none` (bez zmian);
-3. **`stopAt === 0` i `quiet` i `isQuiet(now, quiet)` → `quiet`**;
+3. **`stopAt === 0` i `isQuiet(now, quiet)` → `quiet`**;
 4. `stop-after-max`, `ping`, `visible-ping`, `blocked` (bez zmian).
 
 Jawny czas stopu omija ciszę (decyzja właściciela). `schedule.ts` przy `quiet` nic nie robi:
@@ -77,20 +79,22 @@ prawdziwy request, który zeruje serię i rusza odliczanie.
 
 ### Linia (`hooks/line/line-model.ts`)
 
-`SessionSnapshot` dostaje `quiet: QuietRange | null` (z `live` w `readSnapshot`). Sesja „w ciszy”
-dla linii: włączona, `stopAt === 0`, `quiet` ustawione, a termin następnego pingu
-(`lastRequestAt + ttl − PING_LEAD_MS`) wypada w ciszy. Wtedy:
+`SessionSnapshot` dostaje `quiet: QuietHours` (z `live` w `readSnapshot`). Termin następnego
+pingu to pierwsza pełna minuta nie wcześniej niż `lastRequestAt + ttl − PING_LEAD_MS` (tick chodzi
+na pełnych minutach; ten sam termin pokazuje `󰁔 ping HH:MM`). Sesja „w ciszy” dla linii:
+włączona, `stopAt === 0`, a ten termin wypada w ciszy (`isQuiet`). Wtedy:
 
-- zamiast `󰁔 ping HH:MM` detal `󰁔 no ping: quiet hours to 09:00`;
+- zamiast `󰁔 ping HH:MM` detal `󰁔 no ping: quiet hours to 08:00`;
 - `isKeepingWarm` jest fałszywe: pasek musztardowy (`stalled`), wraca `󰔟 expires HH:MM` i
   ostrzeżenie o ponownym zapisie przed końcem.
 
 Linia pokazuje to od ostatniego requestu przed ciszą, więc zanim ping by wypadł. Zimny cache w
-ciszy: bez detalu o pingu (jak dziś).
+ciszy: bez detalu o pingu (jak dziś). Kropka w tytule sesji (`title.ts`) zostaje: oznacza włączony
+przełącznik, jak przy `stalled` (decyzja właściciela).
 
 ### `/keepwarm status` (`statusText` w `hooks/command.ts`)
 
-Przy włączonej ciszy dodatkowa linia: `Quiet hours 22:00–09:00: no pings then (a stop time
+Przy włączonej ciszy dodatkowa linia: `Quiet hours 21:30–08:00: no pings then (a stop time
 overrides them).`; przy wyłączonej: `Quiet hours: off.`
 
 ### Tick (ckw-x46, `hooks/ping/schedule.ts`, `hooks/events/session.ts`, `hooks/ping/ping.ts`)
@@ -111,26 +115,28 @@ overrides them).`; przy wyłączonej: `Quiet hours: off.`
 
 ### Testy
 
-- `decisions.test.ts`: `quietRange` (domyślny, wyłączony, błędny tekst, start = koniec, minuty),
+- `decisions.test.ts`: `quietHours` (domyślny, wyłączony, błędny tekst, start = koniec, minuty),
   `isQuiet` (zwykłe okno, przez północ, granice: start w ciszy, koniec poza), `decidePing`
   (`quiet` w ciszy; `stopAt` wygrywa; `stop-at-time` przed ciszą), `pingLimit` domyślnie 6,
-  `lineModel` (detal ciszy, ton `stalled`, `expires`), `statusText` (linia ciszy, wyłączona).
+  `lineModel` (detal ciszy, ton `stalled`, `expires`; request o 20:37:30 → termin 21:30 w ciszy,
+  nie `ping 21:29`), `statusText` (linia ciszy, wyłączona).
 - `keep-warm.test.ts`: stub startuje o 10:00 lokalnie; test „nie pinguje w ciszy”: request ok.
-  21:30, ping wypadłby po 22:00 → brak pingu, keep-warm nadal włączony; po requeście rano znowu
-  pinguje. Test „stops itself after N pings” na 6 (kit nie przekazuje opcji, więc obowiązują
+  21:00, ping wypadłby po 21:30 → brak forka, keep-warm nadal włączony; po requeście rano znowu
+  pinguje. Test widocznego pingu: wznowiona sesja (bez odpowiedzi w tym uruchomieniu), termin
+  pingu w ciszy → `submitted` i `forks` puste. Test „stops itself after N pings” na 6 (kit nie przekazuje opcji, więc obowiązują
   domyślne, także cisza; od 10:00 seria 6 × 52 min kończy się ok. 15:30, przed ciszą). Testy z krokami 15 s / 30 s dopasowane do 60 s.
 - `claude plugin test .` zielone; każdy test < 5 s.
 
 ## Kryteria akceptacji
 
-- Opcje `quiet_hours` (domyślnie włączona) i `quiet_range` (domyślnie `22:00-09:00`, minuty,
+- Opcje `quiet_hours` (domyślnie włączona) i `quiet_range` (domyślnie `21:30-08:00`, minuty,
   przez północ) w `plugin.json`; błędny zakres → domyślny.
 - Bez jawnego czasu stopu żaden ping (niewidoczny ani widoczny) nie leci w oknie; z jawnym stopem
   pingi lecą do niego.
 - W ciszy keep-warm zostaje włączony; po prawdziwym requeście po ciszy pinguje znowu bez ręcznego
   włączania.
 - Linia pokazuje `󰁔 no ping: quiet hours to HH:MM` (musztardowo, z czasem wygaśnięcia), zanim
-  ping by wypadł.
+  ping by wypadł; termin pingu w linii to pełna minuta, w której tick go wyśle.
 - `/keepwarm status` mówi o ciszy.
 - Domyślne `max_pings` = 6.
 - Tick co 60 s wyrównany do minuty, retry 60 s; ping nadal w oknie 52–59 min.
