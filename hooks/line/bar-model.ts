@@ -1,6 +1,6 @@
 // The line's bar: blocks that empty over the cache's life, the one gauge of the time left;
 // filled blocks in the line's tone, outlined blocks for the time already gone.
-export const BAR_CELLS = 10
+export const BAR_CELLS = 6
 
 export type BarTime = { isWarm: boolean, remaining: number, ttlMs: number }
 

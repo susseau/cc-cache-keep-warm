@@ -103,7 +103,7 @@ The line sits on the right, above the prompt. Its icons come from a [Nerd Font](
 
 | You see | It means |
 | --- | --- |
-| **40 min left •••••••···** | How much of the cache's life is left. The bar is **blue** while keep-warm is on and able to ping, **mustard** while it is on but cannot ping (paused, failed, waiting), grey when it is off. Empty once the cache has expired (**cold since 14:12**). |
+| **40 min left ••••··** | How much of the cache's life is left. The bar is **blue** while keep-warm is on and able to ping, **mustard** while it is on but cannot ping (paused, failed, waiting), grey when it is off. Empty once the cache has expired (**cold since 14:12**). |
 | **nothing cached yet** | A new conversation, or one you just cleared or compacted: nothing of it is cached until your next message, and the countdown starts with that. |
 | **󰔟 expires 14:12** | The clock time the cache expires if nothing happens. Not shown while keep-warm is holding the cache: the next ping matters then. |
 | **󰁔 ping 14:07** | When keep-warm will read the cache next. **(shows in chat)** means this ping is a short visible message, because the session hasn't answered since the app restarted. |

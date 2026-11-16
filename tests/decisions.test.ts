@@ -126,7 +126,7 @@ test('statusText: on, its ping history and a short cache', async () => {
 
 test('lineModel: keeping while on and able to ping, stalled while on and not, off while off', async () => {
   expect(lineModel(snapshot({ isOn: true }))).toEqual({
-    filledCells: 10, tone: 'keeping', main: '60 min left', details: ['󰁔 ping 10:52', '54k cached'], canToggle: true, isOn: true,
+    filledCells: 6, tone: 'keeping', main: '60 min left', details: ['󰁔 ping 10:52', '54k cached'], canToggle: true, isOn: true,
   })
   expect(lineModel(snapshot({ isOn: true, pingError: 'HTTP 400' })).tone).toEqual('stalled')
   expect(lineModel(snapshot({ isOn: true, pingError: 'HTTP 400' })).details[0]).toEqual('󰔟 expires 11:00')
