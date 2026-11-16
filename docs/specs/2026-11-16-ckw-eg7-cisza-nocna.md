@@ -55,19 +55,22 @@ wypadł; rano keep-warm działa dalej bez ręcznego włączania.
 
 ### Zakres ciszy (nowy czysty moduł `hooks/quiet-hours.ts`)
 
-- `QuietHours = { isOn: false } | { isOn: true, startMin, endMin, rejectedRange?: string }`
-  (minuty od północy; `rejectedRange`: wpisany tekst, którego nie dało się odczytać).
-- `parseQuietHours(isOn: unknown, range: unknown): QuietHours`: `isOn === false` → `{ isOn: false }`;
-  `range` niebędący tekstem `H:MM-H:MM` / `HH:MM-HH:MM` z godzinami 0–23 i minutami 0–59 (spacje
-  wokół myślnika dozwolone) albo z równym początkiem i końcem → domyślny 21:30–08:00 z
-  `rejectedRange` (brak wartości to po prostu domyślny, bez `rejectedRange`).
-- `isQuiet(ms, quiet)`: `false` przy `isOn: false`; inaczej lokalna minuta doby (`Date#getHours/getMinutes`, jak `clockTime`) w
+- `QuietHours = { kind: 'off' } | { kind: 'on', startMin, endMin } | { kind: 'invalid', text }`
+  (minuty od północy; `text`: wartość opcji, której nie dało się odczytać).
+- `parseQuietHours(isOn: unknown, range: unknown): QuietHours`: `isOn === false` → `off`;
+  `isOn` brak albo `true` → zakres; inna wartość przełącznika → `invalid`. Zakres: brak wartości →
+  domyślny 21:30–08:00; tekst `H:MM-H:MM` / `HH:MM-HH:MM` z godzinami 0–23 i minutami 0–59 (spacje
+  wokół myślnika dozwolone), z różnym początkiem i końcem → `on`; każda inna wartość → `invalid`.
+- `isQuiet(ms, quiet)`: `off` → `false`; `invalid` → `true` (bezpiecznie: żadnego pingu, dopóki
+  opcja jest błędna); `on` → lokalna minuta doby (`Date#getHours/getMinutes`, jak `clockTime`) w
   `[startMin, endMin)`; gdy `startMin > endMin`, okno przez północ: `≥ startMin || < endMin`.
 - `formatQuietRange(quiet)`: `"21:30–08:00"` do statusu; `formatQuietEnd(quiet)`: `"08:00"` do linii.
 
-Błędny zakres nie przechodzi po cichu: przy starcie sesji (`startSession`) toast `Quiet hours
-range "<tekst>" not understood (use HH:MM-HH:MM); using 21:30–08:00.`, a `/keepwarm status` dopisuje
-to samo do linii ciszy.
+Błędna opcja nie przechodzi po cichu i nie uruchamia zastępczego okna: przy starcie sesji
+(`startSession`) toast `Quiet hours setting "<tekst>" not understood (use HH:MM-HH:MM); keep-warm
+will not ping until it is fixed.`; linia (włączony keep-warm, bez jawnego stopu) pokazuje
+`quiet hours setting not understood` zamiast `󰁔 ping HH:MM`, musztardowo; `/keepwarm status`
+podaje tekst i format.
 
 ### Decyzja (`hooks/ping/decide-ping.ts`)
 
@@ -91,7 +94,8 @@ pingu to pierwsza pełna minuta nie wcześniej niż `lastRequestAt + ttl − PIN
 na pełnych minutach; ten sam termin pokazuje `󰁔 ping HH:MM`). Sesja „w ciszy” dla linii:
 włączona, `stopAt === 0`, a ten termin wypada w ciszy (`isQuiet`). Wtedy:
 
-- zamiast `󰁔 ping HH:MM` detal `󰁔 no ping: quiet hours to 08:00`;
+- zamiast `󰁔 ping HH:MM` detal `󰁔 no ping: quiet hours to 08:00` (przy `invalid`: detal z
+  sekcji wyżej);
 - `isKeepingWarm` jest fałszywe: pasek musztardowy (`stalled`), wraca `󰔟 expires HH:MM` i
   ostrzeżenie o ponownym zapisie przed końcem.
 
@@ -101,7 +105,7 @@ przełącznik, jak przy `stalled` (decyzja właściciela).
 
 ### `/keepwarm status` (`statusText` w `hooks/command.ts`)
 
-Przy włączonej ciszy dodatkowa linia: `Quiet hours 21:30–08:00: no pings then (a stop time
+Przy `on` dodatkowa linia: `Quiet hours 21:30–08:00: no pings then (a stop time
 overrides them).`; przy wyłączonej: `Quiet hours: off.`
 
 ### Tick (ckw-x46, `hooks/ping/schedule.ts`, `hooks/events/session.ts`, `hooks/ping/ping.ts`)
@@ -126,7 +130,9 @@ overrides them).`; przy wyłączonej: `Quiet hours: off.`
   `isQuiet` (zwykłe okno, przez północ, granice: start w ciszy, koniec poza), `decidePing`
   (`quiet` w ciszy; `stopAt` wygrywa; `stop-at-time` przed ciszą), `pingLimit` domyślnie 6,
   `lineModel` (detal ciszy, ton `stalled`, `expires`; request o 20:37:30 → termin 21:30 w ciszy,
-  nie `ping 21:29`), `statusText` (linia ciszy, wyłączona, błędny zakres).
+  nie `ping 21:29`), `statusText` (linia ciszy, wyłączona, błędna opcja).
+  `parseQuietHours`/`isQuiet` dla błędnego zakresu i błędnego przełącznika (`invalid`, zawsze
+  cisza).
 - `keep-warm.test.ts`: stub startuje o 10:00 lokalnie; test „nie pinguje w ciszy”: request ok.
   21:00, ping wypadłby po 21:30 → brak forka, keep-warm nadal włączony; po requeście rano znowu
   pinguje. Test widocznego pingu: wznowiona sesja (bez odpowiedzi w tym uruchomieniu), termin
@@ -137,7 +143,8 @@ overrides them).`; przy wyłączonej: `Quiet hours: off.`
 ## Kryteria akceptacji
 
 - Opcje `quiet_hours` (domyślnie włączona) i `quiet_range` (domyślnie `21:30-08:00`, minuty,
-  przez północ) w `plugin.json`; błędny zakres → domyślny.
+  przez północ) w `plugin.json`; błędna wartość → brak pingów bez jawnego stopu, toast, linia i
+  status mówią, co poprawić.
 - Bez jawnego czasu stopu żaden ping (niewidoczny ani widoczny) nie leci w oknie; z jawnym stopem
   pingi lecą do niego.
 - W ciszy keep-warm zostaje włączony; po prawdziwym requeście po ciszy pinguje znowu bez ręcznego
