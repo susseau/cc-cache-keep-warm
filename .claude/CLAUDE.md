@@ -22,11 +22,14 @@ A Claude Code mod (a plugin of function hooks). The code is in `hooks/` (below),
 
 These notes live in `.claude/` on purpose: a `CLAUDE.md` at the plugin root makes `claude plugin validate` warn.
 
-## How it runs on the owner's machine
+## How it runs on this machine
 
-- `~/.claude/settings.json` → `env.CLAUDE_CODE_PLUGIN_DIRS` points at this folder, so every session loads the mod from here.
-- `env.CLAUDE_CODE_PLUGIN_DIR_WATCH=1` makes open desktop sessions reload the mod after an edit, once the folder has been quiet for a moment. Without it, an edit needs an app restart.
-- Do not also install it from the marketplace on this machine: it would load twice (two lines, double pings).
+This repo is a fork: `origin` = https://github.com/susseau/cc-cache-keep-warm (ours, where work is merged), `upstream` = https://github.com/andreichiritescu/claude-code-cache-keep-warm (the original author's; nothing is pushed there).
+
+- The mod is installed from the marketplace of the fork (`cache-keep-warm@cache-keep-warm`, user scope), NOT loaded from this folder: sessions run the copy in `~/.claude/plugins/cache/cache-keep-warm/cache-keep-warm/<version>/` (the path is in `~/.claude/plugins/installed_plugins.json`). An edit here, in the main checkout or a worktree, changes nothing in a running session.
+- To see a change in the real line before the merge: copy the changed files into that `<version>/` folder (keep the originals aside), then `/reload-plugins`. The next release overwrites the folder anyway.
+- A release reaches the sessions after the bump is pushed to `origin/main` and the plugin is updated (`claude plugin marketplace update cache-keep-warm`, then `claude plugin update cache-keep-warm@cache-keep-warm`).
+- Alternative for a long dev session: `env.CLAUDE_CODE_PLUGIN_DIRS` pointing at this folder (with `CLAUDE_CODE_PLUGIN_DIR_WATCH=1` open desktop sessions reload after an edit). Never together with the marketplace install: it would load twice (two lines, double pings).
 
 ## Checking a change
 
@@ -73,7 +76,7 @@ These notes live in `.claude/` on purpose: a `CLAUDE.md` at the plugin root make
 ## Releasing
 
 - Bump the version for every release: marketplace installs stay on the old version until it changes. `VERSION` is the source; `aby:podbic-wersje` (version-bump.sh) copies it into `.claude-plugin/plugin.json`. Never edit one without the other.
-- Repository: https://github.com/andreichiritescu/claude-code-cache-keep-warm (MIT).
-- Anthropic plugin directory: submitted 2026-10-06, https://claude.ai/directory/manage/plugins/69d31aba-5641-4f5e-ae46-f640957be779. It re-reads `main` about every 6 hours and auto-publishes versions that pass their checks.
+- Repository: our fork https://github.com/susseau/cc-cache-keep-warm (MIT, from https://github.com/andreichiritescu/claude-code-cache-keep-warm). The manifests and the README still name the upstream as home, author and install source.
+- Anthropic plugin directory: the upstream author's listing (submitted 2026-10-06), fed from upstream `main`, not from the fork; our releases do not reach it.
 - The README section "What it runs, reads and sends" is the plugin's privacy policy (`privacyPolicyUrl`) and what the directory's reviewer checks the mod against. Update it in the same change whenever the mod calls a new tool, reads or stores something new, or sends anything new.
-- The owner commits and pushes. Do not commit or push unless asked.
+- Work runs through the aby workflow (beads tickets, a worktree per task): commits on the task branch, then `aby:skonczyc-prace` merges the PR on `origin`, bumps and pushes `main`. Nothing goes to `upstream`.
