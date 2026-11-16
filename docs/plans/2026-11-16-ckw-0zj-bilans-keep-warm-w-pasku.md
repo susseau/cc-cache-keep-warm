@@ -15,6 +15,12 @@ prawdziwego requestu (nie pingu) i czas ostatniego ciepłego pingu. Koszt każde
 
 **Spec:** brak — plan-only z ticketu ckw-0zj
 
+**Śledzony ticket ckw-4h7** (konfiguracja markdownlint dla gate-check) jest zrobiony przed
+taskami, commitem `0bdfc87`: `.markdownlint.jsonc` wyłącza MD013, MD033, MD034 i MD041 (README.md i
+`.claude/CLAUDE.md` piszą akapit w jednej linii, z HTML i gołymi URL-ami), a
+`docs/.markdownlint.jsonc` trzyma 100 kolumn dla planów. Sprawdzenie:
+`aby gate-check --lint . README.md .claude/CLAUDE.md` → 0 problemów.
+
 ## Global constraints
 
 - Licznik netto w stanie sesji przetrwa reload i relaunch (store).
@@ -186,7 +192,7 @@ import type { LineModel, LineTone } from './line-model'
 - [ ] **Krok 2: Uruchom testy, zacommituj refactor**
 
 ```bash
-claude plugin test . && git add hooks/line/bar-model.ts hooks/line/line-model.ts hooks/line/line-view.tsx .claude/CLAUDE.md && git commit -m "ckw-0zj: refactor: pasek linii w osobnym module bar-model.ts"
+claude plugin test . && git add hooks/line/bar-model.ts hooks/line/line-model.ts hooks/line/line-view.tsx .claude/CLAUDE.md && git commit -m "refactor: pasek linii w osobnym module bar-model.ts (ckw-0zj)"
 ```
 
 Oczekiwany output: PASS wszystkich testów bez zmiany asercji; commit refactoru.
