@@ -55,13 +55,19 @@ wypadł; rano keep-warm działa dalej bez ręcznego włączania.
 
 ### Zakres ciszy (nowy czysty moduł `hooks/quiet-hours.ts`)
 
-- `QuietHours = { isOn: false } | { isOn: true, startMin, endMin }` (minuty od północy).
-- `quietHours(isOn: unknown, range: unknown): QuietHours`: `isOn === false` → `{ isOn: false }`;
+- `QuietHours = { isOn: false } | { isOn: true, startMin, endMin, rejectedRange?: string }`
+  (minuty od północy; `rejectedRange`: wpisany tekst, którego nie dało się odczytać).
+- `parseQuietHours(isOn: unknown, range: unknown): QuietHours`: `isOn === false` → `{ isOn: false }`;
   `range` niebędący tekstem `H:MM-H:MM` / `HH:MM-HH:MM` z godzinami 0–23 i minutami 0–59 (spacje
-  wokół myślnika dozwolone) albo z równym początkiem i końcem → domyślny 21:30–08:00.
+  wokół myślnika dozwolone) albo z równym początkiem i końcem → domyślny 21:30–08:00 z
+  `rejectedRange` (brak wartości to po prostu domyślny, bez `rejectedRange`).
 - `isQuiet(ms, quiet)`: `false` przy `isOn: false`; inaczej lokalna minuta doby (`Date#getHours/getMinutes`, jak `clockTime`) w
   `[startMin, endMin)`; gdy `startMin > endMin`, okno przez północ: `≥ startMin || < endMin`.
-- `quietLabel(quiet)`: `"21:30–08:00"` do statusu; `quietEnd(quiet)`: `"08:00"` do linii.
+- `formatQuietRange(quiet)`: `"21:30–08:00"` do statusu; `formatQuietEnd(quiet)`: `"08:00"` do linii.
+
+Błędny zakres nie przechodzi po cichu: przy starcie sesji (`startSession`) toast `Quiet hours
+range "<tekst>" not understood (use HH:MM-HH:MM); using 21:30–08:00.`, a `/keepwarm status` dopisuje
+to samo do linii ciszy.
 
 ### Decyzja (`hooks/ping/decide-ping.ts`)
 
@@ -79,7 +85,8 @@ prawdziwy request, który zeruje serię i rusza odliczanie.
 
 ### Linia (`hooks/line/line-model.ts`)
 
-`SessionSnapshot` dostaje `quiet: QuietHours` (z `live` w `readSnapshot`). Termin następnego
+`SessionSnapshot` dostaje `quiet: QuietHours` (z `live` w `readSnapshot`; ręczne konstruktory
+snapshotu w testach, `tests/decisions.test.ts` i `tests/savings.test.ts`, dostają domyślną ciszę). Termin następnego
 pingu to pierwsza pełna minuta nie wcześniej niż `lastRequestAt + ttl − PING_LEAD_MS` (tick chodzi
 na pełnych minutach; ten sam termin pokazuje `󰁔 ping HH:MM`). Sesja „w ciszy” dla linii:
 włączona, `stopAt === 0`, a ten termin wypada w ciszy (`isQuiet`). Wtedy:
@@ -115,11 +122,11 @@ overrides them).`; przy wyłączonej: `Quiet hours: off.`
 
 ### Testy
 
-- `decisions.test.ts`: `quietHours` (domyślny, wyłączony, błędny tekst, start = koniec, minuty),
+- `decisions.test.ts`: `parseQuietHours` (domyślny, wyłączony, błędny tekst, start = koniec, minuty),
   `isQuiet` (zwykłe okno, przez północ, granice: start w ciszy, koniec poza), `decidePing`
   (`quiet` w ciszy; `stopAt` wygrywa; `stop-at-time` przed ciszą), `pingLimit` domyślnie 6,
   `lineModel` (detal ciszy, ton `stalled`, `expires`; request o 20:37:30 → termin 21:30 w ciszy,
-  nie `ping 21:29`), `statusText` (linia ciszy, wyłączona).
+  nie `ping 21:29`), `statusText` (linia ciszy, wyłączona, błędny zakres).
 - `keep-warm.test.ts`: stub startuje o 10:00 lokalnie; test „nie pinguje w ciszy”: request ok.
   21:00, ping wypadłby po 21:30 → brak forka, keep-warm nadal włączony; po requeście rano znowu
   pinguje. Test widocznego pingu: wznowiona sesja (bez odpowiedzi w tym uruchomieniu), termin
