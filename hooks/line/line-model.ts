@@ -15,9 +15,9 @@ const WAITS_TEXT = 'keep-warm starts after your next message'
 const SHOWS_IN_CHAT = ' (shows in chat)'
 const NEARLY_FULL_TEXT = 'conversation nearly full: keep-warm waits for you'
 
-// green: keep-warm is on and able to ping; amber: it is on but cannot ping (paused, failed,
-// waiting for room); grey: it is off.
-export type LineTone = 'green' | 'amber' | 'grey'
+// keeping: keep-warm is on and able to ping; stalled: it is on but cannot ping (paused, failed,
+// waiting for room); off: it is off.
+export type LineTone = 'keeping' | 'stalled' | 'off'
 
 export type LineModel = {
   filledCells: number
@@ -38,12 +38,12 @@ export function lineModel(session: SessionSnapshot): LineModel {
   const { lastRequestAt, ttl, isOn } = session
   const countdown = countdownOf(session)
   const canKeepWarm = isLongEnoughToKeepWarm(ttl)
-  const isGreen = isOn && canKeepWarm && !session.pingError && !isBlocked(session)
+  const isKeepingWarm = isOn && canKeepWarm && !session.pingError && !isBlocked(session)
   return {
     filledCells: countdown.isWarm ? Math.max(1, Math.ceil((countdown.remaining / countdown.ttlMs) * BAR_CELLS)) : 0,
-    tone: isGreen ? 'green' : isOn ? 'amber' : 'grey',
+    tone: isKeepingWarm ? 'keeping' : isOn ? 'stalled' : 'off',
     main: lastRequestAt === 0 ? 'nothing cached yet' : countdown.isWarm ? timeLeft(countdown.remaining) : `cold since ${clockTime(countdown.expiresAt)}`,
-    details: [...waitingDetails(session, countdown), ...expiryDetails(session, countdown, isGreen), ...keepWarmDetails(session, countdown), ...cachedDetails(session, countdown, isGreen)],
+    details: [...waitingDetails(session, countdown), ...expiryDetails(session, countdown, isKeepingWarm), ...keepWarmDetails(session, countdown), ...cachedDetails(session, countdown, isKeepingWarm)],
     canToggle: isOn || !ttl || canKeepWarm || ttl.reason === 'overage' || ttl.reason === 'observed',
     isOn,
   }
@@ -63,8 +63,8 @@ function isBlocked(session: SessionSnapshot) {
 
 // While keep-warm holds the cache the next ping matters, not the expiry; near the end the
 // re-write warning names the time itself.
-function expiryDetails({ contextTokens }: SessionSnapshot, { isWarm, remaining, expiresAt }: Countdown, isGreen: boolean) {
-  if (isGreen || !isWarm || (contextTokens > 0 && remaining < EXPIRING_MS)) return []
+function expiryDetails({ contextTokens }: SessionSnapshot, { isWarm, remaining, expiresAt }: Countdown, isKeepingWarm: boolean) {
+  if (isKeepingWarm || !isWarm || (contextTokens > 0 && remaining < EXPIRING_MS)) return []
   return [`${EXPIRES_ICON} expires ${clockTime(expiresAt)}`]
 }
 
@@ -104,10 +104,10 @@ function pingCountDetails({ pings }: SessionSnapshot) {
   return [`${pings.length} ping${pings.length === 1 ? '' : 's'} ${lastPing.isHit ? '✓' : '✗'}`]
 }
 
-function cachedDetails({ contextTokens, lastRequestAt }: SessionSnapshot, { isWarm, remaining, expiresAt }: Countdown, isGreen: boolean) {
+function cachedDetails({ contextTokens, lastRequestAt }: SessionSnapshot, { isWarm, remaining, expiresAt }: Countdown, isKeepingWarm: boolean) {
   if (contextTokens <= 0 || lastRequestAt <= 0) return []
   const size = tokens(contextTokens)
-  if (!isWarm) return [`your next message re-writes ${size}`, ...(isGreen ? ['keep-warm restarts after it'] : [])]
-  if (!isGreen && remaining < EXPIRING_MS) return [`after ${clockTime(expiresAt)} your next message re-writes ${size}`]
+  if (!isWarm) return [`your next message re-writes ${size}`, ...(isKeepingWarm ? ['keep-warm restarts after it'] : [])]
+  if (!isKeepingWarm && remaining < EXPIRING_MS) return [`after ${clockTime(expiresAt)} your next message re-writes ${size}`]
   return [`${size} cached`]
 }

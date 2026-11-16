@@ -122,13 +122,13 @@ test('statusText: on, its ping history and a short cache', async () => {
   expect(statusText(snapshot({ ttl: API_TTL }), 8).split('\n')).toContain('Keep-warm only pings a cache of 30 min or longer.')
 })
 
-test('lineModel: green while on and able to ping, amber while on and not, grey while off', async () => {
+test('lineModel: keeping while on and able to ping, stalled while on and not, off while off', async () => {
   expect(lineModel(snapshot({ isOn: true }))).toEqual({
-    filledCells: 10, tone: 'green', main: '60 min left', details: ['󰁔 ping 10:52', '54k cached'], canToggle: true, isOn: true,
+    filledCells: 10, tone: 'keeping', main: '60 min left', details: ['󰁔 ping 10:52', '54k cached'], canToggle: true, isOn: true,
   })
-  expect(lineModel(snapshot({ isOn: true, pingError: 'HTTP 400' })).tone).toEqual('amber')
+  expect(lineModel(snapshot({ isOn: true, pingError: 'HTTP 400' })).tone).toEqual('stalled')
   expect(lineModel(snapshot({ isOn: true, pingError: 'HTTP 400' })).details[0]).toEqual('󰔟 expires 11:00')
-  expect(lineModel(snapshot({})).tone).toEqual('grey')
+  expect(lineModel(snapshot({})).tone).toEqual('off')
   expect(lineModel(snapshot({ isOn: true, sawResponse: false, nearlyFull: true })).details).toContain('conversation nearly full: keep-warm waits for you')
   expect(lineModel(snapshot({ ttl: API_TTL })).canToggle).toEqual(false)
 })
