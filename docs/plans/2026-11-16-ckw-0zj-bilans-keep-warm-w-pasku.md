@@ -47,8 +47,8 @@ te trzy pola przez relaunch.
   zależy od: `hooks/savings.ts`
 - `hooks/events/turn.ts` — prawdziwy request zapisuje swój czas i dolicza uratowany powrót;
   zależy od: `hooks/savings.ts`, `hooks/state.ts`, `hooks/session-store.ts`
-- `hooks/line/line-model.ts` — detal bilansu („saved 90k” / „cost 5k”) za liczbą pingów, tylko
-  przy włączonym keep-warm; długość paska (`BAR_CELLS`); zależy od: `hooks/savings.ts`, `hooks/format.ts`
+- `hooks/line/line-model.ts` — model linii (czysty): co linia mówi i ile kropek paska wypełnia;
+  zmiana: detal bilansu za liczbą pingów i pasek 6 kropek; zależy od: `hooks/savings.ts`, `hooks/format.ts`
 - `hooks/session-store.ts` — zapis i odtworzenie trzech pól; zależy od: `hooks/state.ts`,
   `hooks/savings.ts`
 - `hooks/command.ts` — linia bilansu w `statusText`; zależy od: `hooks/savings.ts`,
