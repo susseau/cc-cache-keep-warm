@@ -1,0 +1,10 @@
+// Plans and specs of the aby workflow wrap at 100 columns.
+{
+  "extends": "../.markdownlint.jsonc",
+  "MD013": {
+    "line_length": 100,
+    "code_blocks": false,
+    "tables": false,
+    "headings": false
+  }
+}
