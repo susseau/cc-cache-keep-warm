@@ -56,9 +56,14 @@ taskami, commitem `0bdfc87`: `.markdownlint.jsonc` wyłącza MD013, MD033, MD034
   `hooks/state.ts`, `hooks/savings.ts`, `hooks/cache-timing.ts`
 - `hooks/ping/ping.ts` — niewidoczny ping zapisuje się przez `accountPing`; zależy od:
   `hooks/savings-account.ts`
-- `hooks/events/turn.ts` — obsługa requestów i tur; przekazuje widoczny ping do `accountPing`, a
-  prawdziwy request do `accountRealRequest`; zależy od: `hooks/state.ts`,
-  `hooks/session-store.ts`, `hooks/savings-account.ts`
+- `hooks/events/request.ts` (nowy, z podziału `turn.ts` w Tasku 1) — cykl requestu głównej
+  rozmowy: start, wynik, cofnięcie; przekazuje widoczny ping do `accountPing`, a prawdziwy request
+  do `accountRealRequest`; zależy od: `hooks/state.ts`, `hooks/session-store.ts`,
+  `hooks/ttl/cache-length.ts`, `hooks/savings-account.ts`
+- `hooks/events/turn.ts` — koniec tury głównej rozmowy (`finishTurn`); zależy od:
+  `hooks/state.ts`
+- `hooks/register.tsx` — import `startRequest` / `finishRequest` z `events/request.ts`; zależy od:
+  `hooks/events/request.ts`, `hooks/events/turn.ts`
 - `hooks/events/session.ts` — `/clear` i kompakcja zerują znaczniki powrotu, nie bilans; zależy
   od: `hooks/state.ts`
 - `hooks/line/bar-model.ts` (nowy) — pasek linii (czysty): liczba kropek i ile z nich wypełnia
@@ -94,7 +99,9 @@ taskami, commitem `0bdfc87`: `.markdownlint.jsonc` wyłącza MD013, MD033, MD034
 - Zmodyfikuj: `types/index.d.ts:6-52`
 - Zmodyfikuj: `hooks/session-snapshot.ts:3-20`
 - Zmodyfikuj: `hooks/state.ts:1-125`
-- Zmodyfikuj: `hooks/events/turn.ts:1-49`
+- Utwórz: `hooks/events/request.ts`
+- Zmodyfikuj: `hooks/events/turn.ts`
+- Zmodyfikuj: `hooks/register.tsx:8`
 - Zmodyfikuj: `hooks/line/line-model.ts` (import, `keepWarmDetails`, nowa `savingsDetails`)
 - Zmodyfikuj: `README.md:100-115`, `README.md:202`, `README.md:218`
 - Zmodyfikuj: `.claude/CLAUDE.md` (sekcje „Code layout” i „Behaviour agreed with the owner”)
@@ -129,8 +136,8 @@ taskami, commitem `0bdfc87`: `.markdownlint.jsonc` wyłącza MD013, MD033, MD034
 **Reguły stosowalne:**
 
 - `modul-odczyt-decyzja-render` — rachunek (koszt, rozpoznanie powrotu, netto) w czystym
-  `savings.ts` bez formatowania; tekst detalu w `line-model.ts`; `state.ts` i `turn.ts` tylko
-  czytają i zapisują stan.
+  `savings.ts` bez formatowania; tekst detalu w `line-model.ts`; `state.ts` i `request.ts`
+  tylko czytają i zapisują stan.
 - `jedna-odpowiedzialnosc` — `savings.ts` tylko liczy; teksty bilansu zostają przy swoich
   widokach (`line-model.ts`, `command.ts`).
 - `tdd-jedna-intencja` — osobny test na cenę requestu, naliczenie pingu, naliczenie powrotu,
@@ -198,7 +205,50 @@ claude plugin test . && git add hooks/line/bar-model.ts hooks/line/line-model.ts
 
 Oczekiwany output: PASS wszystkich testów bez zmiany asercji; commit refactoru.
 
-- [ ] **Krok 3: Napisz failing testy**
+- [ ] **Krok 3: Podziel `hooks/events/turn.ts` na requesty i tury (refactor bez zmiany zachowania)**
+
+`turn.ts` obsługuje dwa cykle: request (linie 8-49) i turę (linie 51-73). Przenieś cykl requestu
+do nowego `hooks/events/request.ts`, zanim dostanie rozliczanie.
+
+`hooks/events/request.ts` (nowy): komentarz nagłówka
+`// The main conversation's requests: each one restarts the cache's life.`, importy z obecnego
+`turn.ts` (linie 2-6) i bez zmian przeniesione: `startRequest`, typ `FinishedRequest`,
+`finishRequest`, `reachedModel`, `putBack`, `recordVisiblePing` (linie 8-49).
+
+`hooks/events/turn.ts` zostaje z `FinishedTurn` i `finishTurn` (linie 51-73), z nagłówkiem i
+importami:
+
+```ts
+// The main conversation's turns: the end of one says whether it answered and whose it was.
+import type { EngineInterface } from 'claude-code'
+
+import { live, writeSession } from '../state'
+```
+
+`hooks/register.tsx:8` — zastąp
+`import { finishRequest, finishTurn, startRequest } from './events/turn'` dwoma importami:
+
+```ts
+import { finishRequest, startRequest } from './events/request'
+import { finishTurn } from './events/turn'
+```
+
+`.claude/CLAUDE.md`, „Code layout”, punkt `events/` zmień na:
+
+```markdown
+- `events/`: `session.ts` (start, resume, `/clear`, compaction), `request.ts` (each request of the main conversation) and `turn.ts` (the end of each turn).
+```
+
+- [ ] **Krok 4: Uruchom testy i walidację, zacommituj refactor**
+
+```bash
+claude plugin test . && claude plugin validate --strict ./.claude-plugin/plugin.json && git add hooks/events/request.ts hooks/events/turn.ts hooks/register.tsx .claude/CLAUDE.md && git commit -m "refactor: cykl requestu w events/request.ts, tura w events/turn.ts (ckw-0zj)"
+```
+
+Oczekiwany output: PASS wszystkich testów bez zmiany asercji; walidacja bez błędów; commit
+refactoru.
+
+- [ ] **Krok 5: Napisz failing testy**
 
 W `tests/decisions.test.ts` dopisz import pod importem `../hooks/command`:
 
@@ -308,7 +358,7 @@ wstrzymuje keep-warm, a koszt zostaje w linii.)
 (Odpowiedź o 10:00, ping o 10:52, powrót o 11:10: 70 min od ostatniego prawdziwego requestu,
 dłużej niż godzinny cache, a cache ciepły. Zysk 1,9 · 50k = 95k, minus 5 035 za ping, daje 90k.)
 
-- [ ] **Krok 4: Uruchom, potwierdź fail**
+- [ ] **Krok 6: Uruchom, potwierdź fail**
 
 ```bash
 claude plugin test .
@@ -317,7 +367,7 @@ claude plugin test .
 Oczekiwany output: FAIL — brak modułu `../hooks/savings`, a w `keep-warm.test.ts` linie bez
 „cost 5k” i „saved 90k”.
 
-- [ ] **Krok 5: Zaimplementuj minimalnie**
+- [ ] **Krok 7: Zaimplementuj minimalnie**
 
 `types/index.d.ts` — pod typem `KeepWarmPing` dopisz:
 
@@ -478,7 +528,7 @@ export async function accountRealRequest($: EngineInterface, now: number, usage:
 - w `recordPing` zastąp `await appendPing($, startedAt, usage)` linią
   `await accountPing($, startedAt, usage)`.
 
-`hooks/events/turn.ts`:
+`hooks/events/request.ts`:
 
 - import: `import { accountPing, accountRealRequest } from '../savings-account'`; usuń
   `appendPing` z importu `../state`;
@@ -541,7 +591,7 @@ function savingsDetails({ isOn, savings }: SessionSnapshot) {
 - What keep-warm saved (ckw-0zj, owner's choices 2026-11-16): a ping costs its whole request (input 1, cache read 0.1, 1-hour write 2, output 5, in input-token equivalents); a real request after a break longer than the cache, with a warm ping since the last real one, that finds the cache warm saves 1.9x what it read. The line shows the net ("saved 90k", "cost 5k") after the ping count, while keep-warm is on (paused included); `/keepwarm status` shows the whole account once keep-warm has pinged. The account lives for the whole session, through `/clear`, compactions and relaunches.
 ```
 
-- [ ] **Krok 6: Uruchom, potwierdź pass**
+- [ ] **Krok 8: Uruchom, potwierdź pass**
 
 ```bash
 claude plugin test . && claude plugin validate --strict ./.claude-plugin/plugin.json
@@ -549,10 +599,10 @@ claude plugin test . && claude plugin validate --strict ./.claude-plugin/plugin.
 
 Oczekiwany output: PASS wszystkich testów; walidacja bez błędów.
 
-- [ ] **Krok 7: Commit**
+- [ ] **Krok 9: Commit**
 
 ```bash
-git add hooks/savings.ts hooks/savings-account.ts hooks/ping/ping.ts types/index.d.ts hooks/session-snapshot.ts hooks/state.ts hooks/events/turn.ts hooks/line/line-model.ts tests/decisions.test.ts tests/keep-warm.test.ts README.md .claude/CLAUDE.md && git commit -m "ckw-0zj: bilans keep-warm w pasku (koszt pingów, uratowane powroty)"
+git add hooks/savings.ts hooks/savings-account.ts hooks/ping/ping.ts types/index.d.ts hooks/session-snapshot.ts hooks/state.ts hooks/events/request.ts hooks/line/line-model.ts tests/decisions.test.ts tests/keep-warm.test.ts README.md .claude/CLAUDE.md && git commit -m "ckw-0zj: bilans keep-warm w pasku (koszt pingów, uratowane powroty)"
 ```
 
 ---
@@ -563,7 +613,7 @@ git add hooks/savings.ts hooks/savings-account.ts hooks/ping/ping.ts types/index
 
 - Zmodyfikuj: `types/index.d.ts:1-6`
 - Zmodyfikuj: `hooks/session-store.ts:16-51`
-- Zmodyfikuj: `hooks/events/turn.ts` (`finishRequest`)
+- Zmodyfikuj: `hooks/events/request.ts` (`finishRequest`)
 - Zmodyfikuj: `hooks/events/session.ts:52-58` (`startOver`)
 - Zmodyfikuj: `README.md:226`
 - Test: `tests/keep-warm.test.ts`
@@ -698,7 +748,7 @@ export async function save($: EngineInterface) {
     })
 ```
 
-`hooks/events/turn.ts` — na końcu `finishRequest` zapisz store, bo widoczny ping i prawdziwy
+`hooks/events/request.ts` — na końcu `finishRequest` zapisz store, bo widoczny ping i prawdziwy
 request zmieniają bilans po zapisie w `startRequest`:
 
 ```ts
@@ -739,7 +789,7 @@ Oczekiwany output: PASS wszystkich testów; walidacja bez błędów.
 - [ ] **Krok 5: Commit**
 
 ```bash
-git add types/index.d.ts hooks/session-store.ts hooks/events/turn.ts hooks/events/session.ts tests/keep-warm.test.ts README.md && git commit -m "ckw-0zj: bilans keep-warm przetrwa relaunch i /clear"
+git add types/index.d.ts hooks/session-store.ts hooks/events/request.ts hooks/events/session.ts tests/keep-warm.test.ts README.md && git commit -m "ckw-0zj: bilans keep-warm przetrwa relaunch i /clear"
 ```
 
 ---
