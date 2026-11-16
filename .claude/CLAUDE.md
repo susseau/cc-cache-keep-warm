@@ -14,7 +14,7 @@ A Claude Code mod (a plugin of function hooks). The code is in `hooks/` (below),
 - `format.ts`: minutes, clock time, token counts.
 - `ttl/`: the cache length. `read-ttl.ts` reads env, settings and plan windows; `decide-ttl.ts` decides (pure); `cache-length.ts` ties them to the session and records a cache seen going cold early.
 - `ping/`: `schedule.ts` is the 15-s tick; `decide-ping.ts` decides when and which ping (pure); `ping.ts` sends it (fork, or the visible fallback) and checks the room for it.
-- `events/`: `session.ts` (start, resume, `/clear`, compaction) and `turn.ts` (each request and turn of the main conversation).
+- `events/`: `session.ts` (start, resume, `/clear`, compaction), `request.ts` (each request of the main conversation) and `turn.ts` (the end of each turn).
 - `command.ts`: `/keepwarm`; `parseStop` and `statusText` are pure.
 - `line/`: `line-model.ts` decides what the line says (pure), `bar-model.ts` how full its bar is (pure), `line-view.tsx` draws it.
 - `title.ts`: the session-title mark.
