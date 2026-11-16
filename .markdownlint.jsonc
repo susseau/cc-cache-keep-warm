@@ -1,0 +1,15 @@
+{
+  "default": true,
+  "MD013": {
+    "line_length": 100,
+    "code_blocks": false,
+    "tables": false,
+    "headings": false
+  },
+  "MD024": {
+    "siblings_only": true
+  },
+  "MD041": {
+    "front_matter_title": "^\\s*(title|name)\\s*[:=]"
+  }
+}
