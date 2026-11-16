@@ -1,6 +1,6 @@
 // The session's values as one plain object, and what follows from them alone: no reads here,
 // so the pure decisions (the line, /keepwarm's text) can use it without the state module.
-import type { KeepWarmPing, KeepWarmTtl } from '../types'
+import type { KeepWarmPing, KeepWarmSavings, KeepWarmTtl } from '../types'
 
 // Everything the line and /keepwarm show, read in one go.
 export type SessionSnapshot = {
@@ -17,6 +17,9 @@ export type SessionSnapshot = {
   sawResponse: boolean
   pingError: string
   nearlyFull: boolean
+  lastRealRequestAt: number
+  lastWarmPingAt: number
+  savings: KeepWarmSavings
 }
 
 // Before the conversation has answered in this run, Claude Code has nothing to repeat

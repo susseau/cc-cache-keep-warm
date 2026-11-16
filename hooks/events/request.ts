@@ -1,8 +1,9 @@
 // The main conversation's requests: each one restarts the cache's life.
 import type { EngineInterface, ModelUsage } from 'claude-code'
 
+import { accountPing, accountRealRequest } from '../savings-account'
 import { save } from '../session-store'
-import { appendPing, live, readSnapshot, writeSession } from '../state'
+import { live, readSnapshot, writeSession } from '../state'
 import { observeGap } from '../ttl/cache-length'
 
 // Before the request goes out: from now on the cache lives from this request. Answers the time
@@ -24,6 +25,7 @@ export async function finishRequest($: EngineInterface, { turnId, now, previous,
   if (!usage || !reachedModel(usage)) return putBack($, previous)
   await writeSession($, { waitsForMessage: false, pingError: '' })
   if (live.visiblePingAt > 0) await recordVisiblePing($, turnId, usage)
+  else await accountRealRequest($, now, usage)
   // Not the first request after a start: a restart can change the prompt itself (a new
   // Claude Code version), which re-writes the cache whatever the gap, so it proves nothing.
   const isFirst = live.isFirstRequest
@@ -43,7 +45,7 @@ async function putBack($: EngineInterface, previous: number) {
 }
 
 async function recordVisiblePing($: EngineInterface, turnId: string, usage: ModelUsage) {
-  await appendPing($, live.visiblePingAt, usage)
+  await accountPing($, live.visiblePingAt, usage)
   live.visiblePingAt = 0
   live.pingTurnId = turnId
 }

@@ -46,7 +46,7 @@ test('the ping goes out 8 min before expiry and restarts the hour', async ($, on
   expect(engine.forks).toEqual(0)
   await clock.advance(MINUTE)
   expect(engine.forks).toEqual(1)
-  expect(await line($)).toEqual('󰁔 ping 11:44·1 ping ✓·54k cached·60 min left•••••••••• 󰓛 Stop ')
+  expect(await line($)).toEqual('󰁔 ping 11:44·1 ping ✓·󰆼 cost 5k·54k cached·60 min left•••••••••• 󰓛 Stop ')
   expect((await keepwarm($, 'status')).split('\n').at(-1)).toEqual('10:52 · read 50k from cache')
 })
 
@@ -85,7 +85,27 @@ test('a real turn starts the pings in a row over', async ($, on) => {
   await clock.advance(52 * MINUTE)
   expect(await line($)).toContain('1 ping ✓')
   await answer($, engine, READ)
-  expect(await line($)).toEqual('󰁔 ping 11:44·54k cached·60 min left•••••••••• 󰓛 Stop ')
+  expect(await line($)).toEqual('󰁔 ping 11:44·󰆼 cost 5k·54k cached·60 min left•••••••••• 󰓛 Stop ')
+})
+
+test('a return the pings kept warm: the line shows what keep-warm saved', async ($, on) => {
+  const { engine, clock } = stubEngine(on)
+  await start($)
+  await answer($, engine, WRITE)
+  await keepwarm($, 'on')
+  await clock.advance(70 * MINUTE)
+  await answer($, engine, READ)
+  expect(await line($)).toEqual('󰁔 ping 12:02·󰆼 saved 90k·54k cached·60 min left•••••••••• 󰓛 Stop ')
+})
+
+test('a paused keep-warm still shows what its pings cost', async ($, on) => {
+  const { engine, clock } = stubEngine(on)
+  await start($)
+  await answer($, engine, WRITE)
+  await keepwarm($, 'on')
+  engine.fork = { isAnswered: true, usage: WRITE }
+  await clock.advance(52 * MINUTE + 15_000)
+  expect(await line($)).toContain('keep-warm paused·󰆼 cost 100k')
 })
 
 test('a stop time ends keep-warm', async ($, on) => {
@@ -132,7 +152,7 @@ test('the visible ping\'s own turn counts as a ping, not as use', async ($, on) 
   await start($)
   await clock.advance(42 * MINUTE)
   await answer($, engine, READ)
-  expect(await line($)).toEqual('󰁔 ping 11:34·1 ping ✓·54k cached·60 min left•••••••••• 󰓛 Stop ')
+  expect(await line($)).toEqual('󰁔 ping 11:34·1 ping ✓·󰆼 cost 5k·54k cached·60 min left•••••••••• 󰓛 Stop ')
   expect((await keepwarm($, 'status')).split('\n').at(-1)).toEqual('10:42 · read 50k from cache')
 })
 

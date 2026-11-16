@@ -2,6 +2,7 @@ import type { EngineInterface, ModelUsage } from 'claude-code'
 
 import type { KeepWarmPing, KeepWarmTtl } from '../types'
 import { DEFAULT_MAX_PINGS, isCacheHit, MAX_PINGS_CAP } from './cache-timing'
+import { NO_SAVINGS } from './savings'
 import type { SessionSnapshot } from './session-snapshot'
 
 // Per-session values in $.state: they survive a reload of the module, not an app relaunch (the
@@ -21,6 +22,9 @@ const WAITS = { plugin: 'cache-keep-warm', key: 'waitsForMessage' } as const
 const RESTORED = { plugin: 'cache-keep-warm', key: 'restored' } as const
 const PING_ERROR = { plugin: 'cache-keep-warm', key: 'pingError' } as const
 const NEARLY_FULL = { plugin: 'cache-keep-warm', key: 'nearlyFull' } as const
+const LAST_REAL = { plugin: 'cache-keep-warm', key: 'lastRealRequestAt' } as const
+const LAST_WARM_PING = { plugin: 'cache-keep-warm', key: 'lastWarmPingAt' } as const
+const SAVINGS = { plugin: 'cache-keep-warm', key: 'savings' } as const
 
 // The module's own variables start over on a reload; what must survive one is in $.state.
 // `titleMark` is the user's "Mark the session title" setting; changing it in /config reloads
@@ -69,9 +73,10 @@ export const live: {
 }
 
 export async function readSnapshot($: EngineInterface): Promise<SessionSnapshot> {
-  const [last, now, isOn, stopAt, pings, ttl, context, waiting, shortAfter, waits, sawResponse, pingError, nearlyFull] = await Promise.all([
+  const [last, now, isOn, stopAt, pings, ttl, context, waiting, shortAfter, waits, sawResponse, pingError, nearlyFull, lastReal, lastWarmPing, savings] = await Promise.all([
     $.state.get(LAST), $.state.get(NOW), $.state.get(KEEP_WARM), $.state.get(STOP_AT), $.state.get(PINGS), $.state.get(TTL), $.state.get(CONTEXT),
     $.state.get(WAITING), $.state.get(SHORT_AFTER), $.state.get(WAITS), $.state.get(SAW_RESPONSE), $.state.get(PING_ERROR), $.state.get(NEARLY_FULL),
+    $.state.get(LAST_REAL), $.state.get(LAST_WARM_PING), $.state.get(SAVINGS),
   ])
   return {
     lastRequestAt: last.value ?? 0,
@@ -87,6 +92,9 @@ export async function readSnapshot($: EngineInterface): Promise<SessionSnapshot>
     sawResponse: sawResponse.value ?? false,
     pingError: pingError.value ?? '',
     nearlyFull: nearlyFull.value ?? false,
+    lastRealRequestAt: lastReal.value ?? 0,
+    lastWarmPingAt: lastWarmPing.value ?? 0,
+    savings: savings.value ?? NO_SAVINGS,
   }
 }
 
@@ -105,6 +113,9 @@ export async function writeSession($: EngineInterface, patch: Partial<SessionSna
   if (patch.sawResponse !== undefined) await $.state.set(SAW_RESPONSE, patch.sawResponse)
   if (patch.pingError !== undefined) await $.state.set(PING_ERROR, patch.pingError)
   if (patch.nearlyFull !== undefined) await $.state.set(NEARLY_FULL, patch.nearlyFull)
+  if (patch.lastRealRequestAt !== undefined) await $.state.set(LAST_REAL, patch.lastRealRequestAt)
+  if (patch.lastWarmPingAt !== undefined) await $.state.set(LAST_WARM_PING, patch.lastWarmPingAt)
+  if (patch.savings !== undefined) await $.state.set(SAVINGS, patch.savings)
 }
 
 // Whether session.start has restored the saved values in this process.
