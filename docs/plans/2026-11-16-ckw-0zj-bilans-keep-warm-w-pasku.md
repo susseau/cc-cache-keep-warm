@@ -7,8 +7,8 @@ sesji; pasek linii skraca się do 6 kropek.
 uratowanego powrotu, netto. Nie zna tekstu: detal linii składa `line-model.ts`, a linię statusu
 `command.ts`, jak resztę swoich tekstów. `state.ts` trzyma w `$.state` bilans, czas ostatniego
 prawdziwego requestu (nie pingu) i czas ostatniego ciepłego pingu. Koszt każdego pingu dolicza
-`appendPing`, a uratowany powrót `finishRequest` w `events/turn.ts`. `session-store.ts` przenosi
-te trzy pola przez relaunch.
+`accountPing` (`ping/ping-account.ts`), a uratowany powrót `finishRequest` w `events/turn.ts`.
+`session-store.ts` przenosi te trzy pola przez relaunch.
 
 **Stack:** TypeScript, mod API Claude Code (`$.state`, `$.store`, `turn.step`), testy
 `claude plugin test .` (`claude-code/testing`, stub engine `tests/engine.ts`).
@@ -43,14 +43,22 @@ te trzy pola przez relaunch.
   `savings` w `PluginState` i w `KeepWarmSaved`; zależy od: brak
 - `hooks/session-snapshot.ts` — te same trzy pola w `SessionSnapshot`; zależy od:
   `types/index.d.ts`
-- `hooks/state.ts` — refy trzech pól; `appendPing` dolicza koszt pingu i zapamiętuje ciepły ping;
-  zależy od: `hooks/savings.ts`
+- `hooks/state.ts` — odczyt i zapis wartości sesji w `$.state`; dochodzą refy trzech pól; zależy
+  od: `hooks/savings.ts` (`NO_SAVINGS`)
+- `hooks/ping/ping-account.ts` (nowy) — zapis pingu w rachunku sesji: historia, koszt, czas
+  ciepłego pingu; zależy od: `hooks/state.ts`, `hooks/savings.ts`, `hooks/cache-timing.ts`
+- `hooks/ping/ping.ts` — niewidoczny ping zapisuje się przez `accountPing`; zależy od:
+  `hooks/ping/ping-account.ts`
 - `hooks/events/turn.ts` — prawdziwy request zapisuje swój czas i dolicza uratowany powrót;
-  zależy od: `hooks/savings.ts`, `hooks/state.ts`, `hooks/session-store.ts`
+  widoczny ping zapisuje się przez `accountPing`; zależy od: `hooks/savings.ts`,
+  `hooks/state.ts`, `hooks/session-store.ts`, `hooks/ping/ping-account.ts`
+- `hooks/events/session.ts` — `/clear` i kompakcja zerują znaczniki powrotu, nie bilans; zależy
+  od: `hooks/state.ts`
 - `hooks/line/bar-model.ts` (nowy) — pasek linii (czysty): liczba kropek i ile z nich wypełnia
   pozostały czas cache; zależy od: brak
 - `hooks/line/line-model.ts` — treść linii (czysta): detale, czas, ton, przycisk; dochodzi detal
-  bilansu za liczbą pingów; zależy od: `hooks/savings.ts`, `hooks/format.ts`
+  bilansu za liczbą pingów; zależy od: `hooks/savings.ts`, `hooks/format.ts`,
+  `hooks/line/bar-model.ts`
 - `hooks/session-store.ts` — zapis i odtworzenie trzech pól; zależy od: `hooks/state.ts`,
   `hooks/savings.ts`
 - `hooks/command.ts` — linia bilansu w `statusText`; zależy od: `hooks/savings.ts`,
@@ -73,7 +81,9 @@ te trzy pola przez relaunch.
 
 - Utwórz: `hooks/line/bar-model.ts`
 - Utwórz: `hooks/savings.ts`
+- Utwórz: `hooks/ping/ping-account.ts`
 - Zmodyfikuj: `hooks/line/line-view.tsx:4`
+- Zmodyfikuj: `hooks/ping/ping.ts` (import, `recordPing`)
 - Zmodyfikuj: `types/index.d.ts:6-52`
 - Zmodyfikuj: `hooks/session-snapshot.ts:3-20`
 - Zmodyfikuj: `hooks/state.ts:1-125`
@@ -389,7 +399,7 @@ import type { KeepWarmPing, KeepWarmSavings, KeepWarmTtl } from '../types'
 
 `hooks/state.ts`:
 
-- import: `import { addPing, NO_SAVINGS } from './savings'`;
+- import: `import { NO_SAVINGS } from './savings'`;
 - refy pod `NEARLY_FULL`:
 
 ```ts
@@ -424,22 +434,40 @@ const SAVINGS = { plugin: 'cache-keep-warm', key: 'savings' } as const
   if (patch.savings !== undefined) await $.state.set(SAVINGS, patch.savings)
 ```
 
-- `appendPing` dolicza koszt i zapamiętuje ciepły ping (oba pingi przechodzą przez tę funkcję):
+`appendPing` zostaje bez zmian (tylko historia pingów).
+
+`hooks/ping/ping-account.ts` (nowy):
 
 ```ts
-// A ping (invisible or visible), what its request found in the cache, and what it cost.
-export async function appendPing($: EngineInterface, at: number, usage: ModelUsage) {
-  const ping: KeepWarmPing = { at, isHit: isCacheHit(usage), read: usage.cache_read_input_tokens }
-  const [{ value: pings = [] }, { value: savings = NO_SAVINGS }] = await Promise.all([$.state.get(PINGS), $.state.get(SAVINGS)])
-  await $.state.set(PINGS, [...pings, ping].slice(-MAX_PINGS_CAP))
-  await $.state.set(SAVINGS, addPing(savings, usage))
-  if (ping.isHit) await $.state.set(LAST_WARM_PING, at)
+// A ping (invisible or visible) on the session's account: its place in the ping history, what it
+// cost, and, when it found the cache warm, its time, which later tells a saved return.
+import type { EngineInterface, ModelUsage } from 'claude-code'
+
+import { isCacheHit } from '../cache-timing'
+import { addPing } from '../savings'
+import { appendPing, readSnapshot, writeSession } from '../state'
+
+export async function accountPing($: EngineInterface, at: number, usage: ModelUsage) {
+  await appendPing($, at, usage)
+  const { savings } = await readSnapshot($)
+  await writeSession($, { savings: addPing(savings, usage) })
+  if (isCacheHit(usage)) await writeSession($, { lastWarmPingAt: at })
 }
 ```
 
+`hooks/ping/ping.ts`:
+
+- import: usuń `appendPing` z importu `../state` i dopisz
+  `import { accountPing } from './ping-account'`;
+- w `recordPing` zastąp `await appendPing($, startedAt, usage)` linią
+  `await accountPing($, startedAt, usage)`.
+
 `hooks/events/turn.ts`:
 
-- import: `import { addSavedReturn, isSavedReturn } from '../savings'`;
+- importy: `import { addSavedReturn, isSavedReturn } from '../savings'` i
+  `import { accountPing } from '../ping/ping-account'`; usuń `appendPing` z importu `../state`;
+- w `recordVisiblePing` zastąp `await appendPing($, live.visiblePingAt, usage)` linią
+  `await accountPing($, live.visiblePingAt, usage)`;
 - w `finishRequest` zastąp linię
   `if (live.visiblePingAt > 0) await recordVisiblePing($, turnId, usage)`:
 
@@ -502,6 +530,9 @@ function savingsDetails({ isOn, savings }: SessionSnapshot) {
 - `savings.ts`: what keep-warm cost and saved this session (a request's cost, a saved return, the net); the line and `/keepwarm status` word it.
 ```
 
+  a w punkcie `ping/` za opisem `ping.ts` dopisz
+  `` `ping-account.ts` puts a ping on the session's account (history, cost, last warm ping). ``
+
 - „Behaviour agreed with the owner”, nowy punkt na końcu:
 
 ```markdown
@@ -519,7 +550,7 @@ Oczekiwany output: PASS wszystkich testów; walidacja bez błędów.
 - [ ] **Krok 7: Commit**
 
 ```bash
-git add hooks/savings.ts types/index.d.ts hooks/session-snapshot.ts hooks/state.ts hooks/events/turn.ts hooks/line/line-model.ts tests/decisions.test.ts tests/keep-warm.test.ts README.md .claude/CLAUDE.md && git commit -m "ckw-0zj: bilans keep-warm w pasku (koszt pingów, uratowane powroty)"
+git add hooks/savings.ts hooks/ping/ping-account.ts hooks/ping/ping.ts types/index.d.ts hooks/session-snapshot.ts hooks/state.ts hooks/events/turn.ts hooks/line/line-model.ts tests/decisions.test.ts tests/keep-warm.test.ts README.md .claude/CLAUDE.md && git commit -m "ckw-0zj: bilans keep-warm w pasku (koszt pingów, uratowane powroty)"
 ```
 
 ---
@@ -531,6 +562,7 @@ git add hooks/savings.ts types/index.d.ts hooks/session-snapshot.ts hooks/state.
 - Zmodyfikuj: `types/index.d.ts:1-6`
 - Zmodyfikuj: `hooks/session-store.ts:16-51`
 - Zmodyfikuj: `hooks/events/turn.ts` (`finishRequest`)
+- Zmodyfikuj: `hooks/events/session.ts:52-58` (`startOver`)
 - Zmodyfikuj: `README.md:226`
 - Test: `tests/keep-warm.test.ts`
 
@@ -585,6 +617,17 @@ test('/clear keeps what keep-warm saved this session', async ($, on) => {
   await $.classic.SessionStart({ session_id: 'S1', transcript_path: '/t', cwd: '/work', hook_event_name: 'SessionStart', source: 'clear' } as any)
   expect(await line($)).toContain('cost 5k')
 })
+
+test('a return after /clear is no saved return: the ping warmed the conversation before it', async ($, on) => {
+  const { engine, clock } = stubEngine(on)
+  await start($)
+  await answer($, engine, WRITE)
+  await keepwarm($, 'on')
+  await clock.advance(70 * MINUTE)
+  await $.classic.SessionStart({ session_id: 'S1', transcript_path: '/t', cwd: '/work', hook_event_name: 'SessionStart', source: 'clear' } as any)
+  await answer($, engine, READ)
+  expect(await line($)).toContain('cost 5k')
+})
 ```
 
 Przebieg pierwszego testu:
@@ -595,7 +638,9 @@ Przebieg pierwszego testu:
   był po tym requeście;
 - wynik: +1 powrót (+95k).
 
-Drugi test pilnuje decyzji „nigdy nie zeruj w sesji” i przechodzi już po Tasku 1.
+Drugi test pilnuje decyzji „nigdy nie zeruj w sesji” i przechodzi już po Tasku 1. Trzeci: ping
+o 10:52 ogrzał rozmowę sprzed `/clear` (11:10), więc odczyt cache po nim nie jest uratowanym
+powrotem.
 
 - [ ] **Krok 2: Uruchom, potwierdź fail**
 
@@ -604,8 +649,8 @@ claude plugin test .
 ```
 
 Oczekiwany output: FAIL w
-`'a ping before a relaunch and a return after it: the saving counts and is kept'`: linia bez
-„saved 80k”.
+`'a ping before a relaunch and a return after it: the saving counts and is kept'` (linia bez
+„saved 80k”) i w `'a return after /clear is no saved return: …'` (linia z „saved 90k”).
 
 - [ ] **Krok 3: Zaimplementuj minimalnie**
 
@@ -660,6 +705,22 @@ request zmieniają bilans po zapisie w `startRequest`:
 }
 ```
 
+`hooks/events/session.ts` — `startOver` zeruje też znaczniki powrotu (bilans zostaje):
+
+```ts
+// The conversation starts over (cleared, or replaced by its summary): nothing of it is cached
+// until the next request writes it, and no ping has kept the new one warm yet. What keep-warm
+// cost and saved stays for the session.
+export async function startOver($: EngineInterface) {
+  await writeSession($, {
+    lastRequestAt: 0, pings: [], sawResponse: false, contextTokens: 0, pingError: '', now: await $.clock.now(),
+    lastRealRequestAt: 0, lastWarmPingAt: 0,
+  })
+  live.roomChecked = false
+  await saveIfRestored($)
+}
+```
+
 `README.md:226` — `the time of the last request, whether keep-warm is on, and the stop time you
 gave it.` → `the time of the last request (and of the last one that was not a ping, and of the
 last ping that found the cache warm), whether keep-warm is on, the stop time you gave it, and what
@@ -676,7 +737,7 @@ Oczekiwany output: PASS wszystkich testów; walidacja bez błędów.
 - [ ] **Krok 5: Commit**
 
 ```bash
-git add types/index.d.ts hooks/session-store.ts hooks/events/turn.ts tests/keep-warm.test.ts README.md && git commit -m "ckw-0zj: bilans keep-warm przetrwa relaunch i /clear"
+git add types/index.d.ts hooks/session-store.ts hooks/events/turn.ts hooks/events/session.ts tests/keep-warm.test.ts README.md && git commit -m "ckw-0zj: bilans keep-warm przetrwa relaunch i /clear"
 ```
 
 ---
