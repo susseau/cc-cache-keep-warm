@@ -30,7 +30,7 @@ startuje (`hooks/ping/ticking.ts`) na pełnej minucie przez `$.clock.after`, pot
 - `hooks/quiet-hours.ts` (nowy) — odczyt opcji ciszy do wartości: typ `QuietHours`,
   `parseQuietHours`; czysty; zależy od: brak
 - `hooks/ping/decide-ping.ts` — `isQuiet`, `fullMinuteFrom` i krok `'quiet'` w `decidePing`;
-  zależy od: `hooks/quiet-hours.ts`
+  zależy od: `hooks/quiet-hours.ts`, `hooks/cache-timing.ts`
 - `hooks/ping/schedule.ts` — `case 'quiet'` w `keepWarm`; traci `TICK_MS`; zależy od:
   `hooks/ping/decide-ping.ts`
 - `hooks/ping/ping.ts` — ponowienie po 60 s; zależy od: brak
