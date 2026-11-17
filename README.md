@@ -157,6 +157,8 @@ Keep-warm only pings a cache that lasts **30 minutes or more**: on the five-minu
 | Mark the session title | On | While keep-warm is on, put 🟢 in front of the session's title in the desktop app's session list |
 | On in new sessions | Off | Turn keep-warm on in every new session, as if you ran `/keepwarm on`. A session you reopen keeps its own switch, so one you switched off stays off |
 | Pings in a row | 8 | Without a stop time, keep-warm stops itself after this many pings in a row, one about every 52 minutes (1 to 20; 8 is about 7 hours). Any real turn in the conversation starts the count over |
+| Quiet hours | On | Without a stop time, keep-warm sends no ping in the quiet hours: the cache expires, and after your next message keep-warm carries on. A stop time (`/keepwarm 3h`, `/keepwarm until 23:30`) overrides them |
+| Quiet hours range | 21:30-08:00 | The quiet hours in your local time, `HH:MM-HH:MM`; they may run past midnight. A value keep-warm cannot read means no pings until you fix it |
 
 Change them in `/config`, or with `/plugin configure cache-keep-warm@cache-keep-warm`.
 
@@ -173,7 +175,7 @@ In the desktop app, renaming a title **you typed yourself** asks for your approv
 Your cache lasts five minutes by default, so keep-warm does not ping. If you take longer breaks, set `promptCacheTtl` to `"1h"` in your Claude Code settings: the cache then lasts an hour and keep-warm works. One-hour cache writes cost more than five-minute ones, so this pays off only if you do take breaks.
 
 **Will it ping forever if I forget it?**
-No. It stops by itself after 8 pings in a row (about 7 hours; the **Pings in a row** setting goes up to 20), or at the time you gave it with `/keepwarm 3h` or `/keepwarm until 18:00`.
+No. It stops by itself after 8 pings in a row (about 7 hours; the **Pings in a row** setting goes up to 20), or at the time you gave it with `/keepwarm 3h` or `/keepwarm until 18:00`. It also sends no ping in the quiet hours (21:30–08:00 by default) unless you gave it a stop time.
 
 **Does it work in VS Code?**
 The keep-warm pings work there, but the line is only drawn in the terminal and in the desktop app's Code tab.
@@ -218,7 +220,8 @@ With the setting **Mark the session title** off, the mod never adds the mark; it
 - **Your Claude Code settings**, for `promptCacheTtl` only, and three environment variables: `FORCE_PROMPT_CACHING_5M`, `CLAUDE_CODE_PROMPT_CACHE_TTL` and `ENABLE_PROMPT_CACHING_1H`, to know how long your cache lasts. The mod asks Claude Code for that one setting by name, so it never receives your other settings, credentials or API keys.
 - **This session's figures** from Claude Code: the conversation's size, the cache, input and output tokens of each request (to count what keep-warm cost and saved), and whether your plan's usage limits are reported (which tells a subscription from an API key). After a restart, while the next ping would be the visible one, also the free space left in the context window and the size of the instruction files (their token counts only, never their text), to check the visible ping fits.
 - **When you reopen a session**, what Claude Code tells mods at that moment: how long ago the session's last answer came and how big the conversation is. That lets the countdown carry on before your first message.
-- **The clock.**
+- **Its own settings**: the ones in the table above, quiet hours included.
+- **The clock**, and its local time of day for the quiet hours.
 
 It checks these every 15 seconds, on your computer, and sends none of them anywhere. It does not read your files.
 

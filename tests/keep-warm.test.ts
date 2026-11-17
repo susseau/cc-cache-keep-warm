@@ -88,6 +88,22 @@ test('a real turn starts the pings in a row over', async ($, on) => {
   expect(await line($)).toEqual('󰁔 ping 11:44·󰆼 cost 5k·54k cached·60 min left•••••• 󰓛 Stop ')
 })
 
+test('no ping in the quiet hours; keep-warm stays on and pings again after a morning request', async ($, on) => {
+  const { engine, clock } = stubEngine(on)
+  // 07:00 the next day, before the session starts: no check runs yet.
+  await clock.advance(21 * 60 * MINUTE)
+  await start($)
+  await answer($, engine, WRITE)
+  await keepwarm($, 'on')
+  // The ping would have gone out at 07:52, inside the default quiet hours (21:30–08:00).
+  await clock.advance(70 * MINUTE)
+  expect(engine.forks).toEqual(0)
+  expect((await keepwarm($, 'status')).split('\n')[0]).toContain('Keep-warm on')
+  await answer($, engine, WRITE)
+  await clock.advance(52 * MINUTE)
+  expect(engine.forks).toEqual(1)
+})
+
 test('a return the pings kept warm: the line shows what keep-warm saved', async ($, on) => {
   const { engine, clock } = stubEngine(on)
   await start($)

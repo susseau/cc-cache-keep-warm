@@ -52,10 +52,13 @@ async function keepWarm($: EngineInterface, { now, ttl, usage, contextTokens, se
   let { nearlyFull } = session
   if (needsVisible && !live.roomChecked) nearlyFull = await checkRoom($, usage.context.window, contextTokens)
   const { lastRequestAt, stopAt, pings } = session
-  const step = decidePing({ now, ttl, lastRequestAt, stopAt, pendingUntil: live.pingPendingUntil, pingsInRow: pings.length, maxPings: live.maxPings, needsVisible, nearlyFull })
+  const step = decidePing({ now, ttl, lastRequestAt, stopAt, pendingUntil: live.pingPendingUntil, pingsInRow: pings.length, maxPings: live.maxPings, needsVisible, nearlyFull, quiet: session.quiet })
 
   switch (step) {
     case 'none':
+    case 'quiet':
+      // In the quiet hours nothing goes out and nothing is held: keep-warm stays on, the cache
+      // expires, and the next real request starts the countdown again.
       return
     case 'stop-at-time':
       await switchOff($)

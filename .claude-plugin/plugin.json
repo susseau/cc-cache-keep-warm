@@ -43,6 +43,18 @@
       "default": 8,
       "min": 1,
       "max": 20
+    },
+    "quiet_hours": {
+      "type": "boolean",
+      "title": "Quiet hours",
+      "description": "Without a stop time, keep-warm sends no ping in the quiet hours: the cache expires, and after your next message keep-warm carries on",
+      "default": true
+    },
+    "quiet_range": {
+      "type": "string",
+      "title": "Quiet hours range",
+      "description": "The quiet hours in your local time, HH:MM-HH:MM; they may run past midnight",
+      "default": "21:30-08:00"
     }
   }
 }
