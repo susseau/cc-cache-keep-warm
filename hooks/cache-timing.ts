@@ -19,11 +19,11 @@ export const KEEP_WARM_MIN_TTL_MS = 30 * MINUTE_MS
 export const PING_LEAD_MS = 8 * MINUTE_MS
 export const PING_MARGIN_MS = MINUTE_MS
 // Without an explicit stop time, keep-warm stops itself after this many pings in a row (the
-// `max_pings` option; 8 by default, ~7 h). A ping that finds the cache warm reads it at 0.1x its
+// `max_pings` option; 6 by default, ~5 h). A ping that finds the cache warm reads it at 0.1x its
 // size, a return to a warm cache saves 1.9x (a 2x re-write less the 0.1x read): about 19 warm
 // pings is where pinging stops paying even for a sure return, and the longer the break, the less
 // likely the return. A ping that finds the cache cold re-writes it at 2x, more than one return saves.
-export const DEFAULT_MAX_PINGS = 8
+export const DEFAULT_MAX_PINGS = 6
 export const MAX_PINGS_CAP = 20
 
 // The `max_pings` option as a whole number brought into 1..MAX_PINGS_CAP; not a number, the default.

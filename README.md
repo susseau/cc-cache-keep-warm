@@ -42,7 +42,7 @@ Example: a long conversation of **500k tokens** on Claude Opus 5.5, at current A
 | --- | ---: |
 | Your next message after the cache expired (re-writes everything) | **≈ $4.00** |
 | One keep-warm ping (reads it from the cache) | ≈ $0.10 |
-| Keeping it warm through an 8-hour night (8 pings) | ≈ $0.80 |
+| Keeping it warm through a 5-hour break (6 pings) | ≈ $0.60 |
 
 On a subscription you do not pay per token, but the same proportions apply to your usage limits.
 
@@ -95,7 +95,7 @@ Click **󰐊 Warm** on the line, or type a command:
 | `/keepwarm off` | Stop (or click **󰓛 Stop**) |
 | `/keepwarm` | Show the state, the last pings and what keep-warm cost and saved in this session |
 
-Keep-warm is **off by default** and you switch it **per session**: only the sessions you want are kept warm. To have it on in every new session, turn on the **On in new sessions** setting. It stops by itself after about 7 hours (8 pings in a row, the **Pings in a row** setting) unless you gave it a time: each ping that finds the cache warm costs about a nineteenth of what one return to a warm cache saves (one that finds it cold re-writes it and can cost more than a return saves), and the longer the break, the less likely it ends soon.
+Keep-warm is **off by default** and you switch it **per session**: only the sessions you want are kept warm. To have it on in every new session, turn on the **On in new sessions** setting. It stops by itself after about 5 hours (6 pings in a row, the **Pings in a row** setting) unless you gave it a time: each ping that finds the cache warm costs about a nineteenth of what one return to a warm cache saves (one that finds it cold re-writes it and can cost more than a return saves), and the longer the break, the less likely it ends soon.
 
 ### Reading the line
 
@@ -158,7 +158,7 @@ Keep-warm only pings a cache that lasts **30 minutes or more**: on the five-minu
 | --- | --- | --- |
 | Mark the session title | On | While keep-warm is on, put 🟢 in front of the session's title in the desktop app's session list |
 | On in new sessions | Off | Turn keep-warm on in every new session, as if you ran `/keepwarm on`. A session you reopen keeps its own switch, so one you switched off stays off |
-| Pings in a row | 8 | Without a stop time, keep-warm stops itself after this many pings in a row, one about every 52 minutes (1 to 20; 8 is about 7 hours). Any real turn in the conversation starts the count over |
+| Pings in a row | 6 | Without a stop time, keep-warm stops itself after this many pings in a row, one about every 52 minutes (1 to 20; 6 is about 5 hours). Any real turn in the conversation starts the count over |
 | Quiet hours | On | Without a stop time, keep-warm sends no ping in the quiet hours: the cache expires, and after your next message keep-warm carries on. A stop time (`/keepwarm 3h`, `/keepwarm until 23:30`) overrides them |
 | Quiet hours range | 21:30-08:00 | The quiet hours in your local time, `HH:MM-HH:MM`; they may run past midnight. A value keep-warm cannot read means no pings until you fix it |
 
@@ -177,7 +177,7 @@ In the desktop app, renaming a title **you typed yourself** asks for your approv
 Your cache lasts five minutes by default, so keep-warm does not ping. If you take longer breaks, set `promptCacheTtl` to `"1h"` in your Claude Code settings: the cache then lasts an hour and keep-warm works. One-hour cache writes cost more than five-minute ones, so this pays off only if you do take breaks.
 
 **Will it ping forever if I forget it?**
-No. It stops by itself after 8 pings in a row (about 7 hours; the **Pings in a row** setting goes up to 20), or at the time you gave it with `/keepwarm 3h` or `/keepwarm until 18:00`. It also sends no ping in the quiet hours (21:30–08:00 by default) unless you gave it a stop time.
+No. It stops by itself after 6 pings in a row (about 5 hours; the **Pings in a row** setting goes up to 20), or at the time you gave it with `/keepwarm 3h` or `/keepwarm until 18:00`. It also sends no ping in the quiet hours (21:30–08:00 by default) unless you gave it a stop time.
 
 **Does it work in VS Code?**
 The keep-warm pings work there, but the line is only drawn in the terminal and in the desktop app's Code tab.

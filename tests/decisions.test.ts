@@ -81,8 +81,8 @@ test('decidePing: only between 52 and 59 min, never on a cold cache', async () =
 
 test('decidePing: the stops, and the visible ping', async () => {
   expect(decidePing(check({ stopAt: START + 30 * MINUTE }))).toEqual('stop-at-time')
-  expect(decidePing(check({ pingsInRow: 7 }))).toEqual('ping')
-  expect(decidePing(check({ pingsInRow: 8 }))).toEqual('stop-after-max')
+  expect(decidePing(check({ pingsInRow: 5 }))).toEqual('ping')
+  expect(decidePing(check({ pingsInRow: 6 }))).toEqual('stop-after-max')
   expect(decidePing(check({ pingsInRow: 8, maxPings: 12 }))).toEqual('ping')
   expect(decidePing(check({ pingsInRow: 8, stopAt: START + 3 * HOUR }))).toEqual('ping')
   expect(decidePing(check({ needsVisible: true }))).toEqual('visible-ping')
@@ -138,14 +138,14 @@ test('decidePing: no ping in the quiet hours unless a stop time was given', asyn
   expect(decidePing(check({ quiet: { kind: 'invalid', setting: 'range', text: 'nights' } }))).toEqual('quiet')
 })
 
-test('pingLimit: the max_pings option brought into 1..20; not a number, 8', async () => {
-  expect(pingLimit(undefined)).toEqual(8)
+test('pingLimit: the max_pings option brought into 1..20; not a number, 6', async () => {
+  expect(pingLimit(undefined)).toEqual(6)
   expect(pingLimit(12)).toEqual(12)
   expect(pingLimit(3.7)).toEqual(3)
   expect(pingLimit(50)).toEqual(20)
   expect(pingLimit(0)).toEqual(1)
-  expect(pingLimit(Number.NaN)).toEqual(8)
-  expect(pingLimit('12')).toEqual(8)
+  expect(pingLimit(Number.NaN)).toEqual(6)
+  expect(pingLimit('12')).toEqual(6)
 })
 
 test('isTooFullForVisiblePing: free room against the instruction files plus 30k', async () => {
@@ -173,9 +173,9 @@ const snapshot = (fields: Partial<SessionSnapshot> = {}): SessionSnapshot => ({
 
 test('statusText: on, its ping history and a short cache', async () => {
   const on = snapshot({ isOn: true, pings: [{ at: START, isHit: true, read: 54_000 }, { at: START + HOUR, isHit: false, read: 0 }] })
-  expect(statusText(on, 8).split('\n')[0]).toContain('(stops itself after 8 pings in a row)')
-  expect(statusText(on, 8).split('\n').slice(-2)).toEqual(['10:00 · read 54k from cache', '11:00 · found the cache cold'])
-  expect(statusText(snapshot({ ttl: API_TTL }), 8).split('\n')).toContain('Keep-warm only pings a cache of 30 min or longer.')
+  expect(statusText(on, 6).split('\n')[0]).toContain('(stops itself after 6 pings in a row)')
+  expect(statusText(on, 6).split('\n').slice(-2)).toEqual(['10:00 · read 54k from cache', '11:00 · found the cache cold'])
+  expect(statusText(snapshot({ ttl: API_TTL }), 6).split('\n')).toContain('Keep-warm only pings a cache of 30 min or longer.')
 })
 
 test('lineModel: keeping while on and able to ping, stalled while on and not, off while off', async () => {

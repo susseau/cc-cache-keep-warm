@@ -20,7 +20,7 @@ test('/keepwarm on: the line names the next ping', async ($, on) => {
   await answer($, engine, WRITE)
   await clock.advance(MINUTE)
   expect(await keepwarm($, 'on')).toEqual([
-    'Keep-warm on (stops itself after 8 pings in a row): about 8 min before the cache would expire, it re-reads the conversation from cache in the background. A cold cache is never pinged.',
+    'Keep-warm on (stops itself after 6 pings in a row): about 8 min before the cache would expire, it re-reads the conversation from cache in the background. A cold cache is never pinged.',
     'Quiet hours 21:30–08:00: no pings then (a stop time overrides them).',
     'This session\'s cache lasts 1-hour (subscription).',
   ].join('\n'))
@@ -93,14 +93,15 @@ test('the first check after a start between full minutes waits for the minute th
   expect(engine.submitted.length).toEqual(1)
 })
 
-test('keep-warm stops itself after 8 pings in a row (the default; the kit cannot pass max_pings)', async ($, on) => {
+test('keep-warm stops itself after 6 pings in a row (the default; the kit cannot pass max_pings)', async ($, on) => {
   const { engine, clock } = stubEngine(on)
   await start($)
   await answer($, engine, WRITE)
   await keepwarm($, 'on')
-  for (let i = 0; i < 9; i++) await clock.advance(52 * MINUTE)
-  expect(engine.forks).toEqual(8)
-  expect(engine.toasts.at(-1)).toEqual('Keep-warm stopped itself after 8 pings in a row; the cache will expire.')
+  // From 10:00 the six pings end at 15:12, well before the default quiet hours.
+  for (let i = 0; i < 7; i++) await clock.advance(52 * MINUTE)
+  expect(engine.forks).toEqual(6)
+  expect(engine.toasts.at(-1)).toEqual('Keep-warm stopped itself after 6 pings in a row; the cache will expire.')
   expect((await keepwarm($, 'status')).split('\n')[0]).toEqual('Keep-warm off: the cache expires normally.')
 })
 
