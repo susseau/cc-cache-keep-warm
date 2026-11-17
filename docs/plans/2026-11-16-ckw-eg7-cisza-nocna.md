@@ -3,10 +3,11 @@
 **Cel:** Keep-warm nie pinguje w godzinach ciszy (domyślnie 21:30–08:00) bez jawnego czasu stopu,
 mówi o tym w linii i statusie, sprawdza stan co pełną minutę, a domyślna seria to 6 pingów.
 
-**Architektura:** Nowy czysty moduł `hooks/quiet-hours.ts` czyta opcje do typu `QuietHours` i
-rozstrzyga, czy chwila wypada w ciszy. `decidePing` dostaje krok `'quiet'`, `lineModel` i
-`statusText` czytają ciszę ze `SessionSnapshot` (z `live.quiet`). Tick startuje na pełnej minucie
-przez `$.clock.after`, potem `$.clock.every(60 s)`.
+**Architektura:** Nowy czysty moduł `hooks/quiet-hours.ts` czyta opcje do typu `QuietHours`;
+`isQuiet` w `decide-ping.ts` rozstrzyga, czy chwila wypada w ciszy; słowa stoją przy innych słowach
+(`clockOfDay` w `format.ts`, `quietNotUnderstood` w `command.ts`). `decidePing` dostaje krok
+`'quiet'`, `lineModel` i `statusText` czytają ciszę ze `SessionSnapshot` (z `live.quiet`). Tick
+startuje w `session.ts` na pełnej minucie przez `$.clock.after`, potem `$.clock.every(60 s)`.
 
 **Stack:** TypeScript, mod Claude Code 2.1.325 (`$.clock`, `$.ui.toast`, `userConfig`), kit
 `claude plugin test`.
@@ -25,25 +26,26 @@ przez `$.clock.after`, potem `$.clock.every(60 s)`.
 
 ## File Structure
 
-- `hooks/quiet-hours.ts` (nowy) — jedna odpowiedzialność: pojęcie ciszy jako czysta wartość (jak
-  `cache-timing.ts` dla długości cache): typ `QuietHours`, `parseQuietHours`, `isQuiet`,
-  `formatQuietRange`, `formatQuietEnd`, `quietNotUnderstood`; bez `$`; zależy od: brak
-- `hooks/ping/decide-ping.ts` — krok `'quiet'` w `decidePing`; zależy od: `hooks/quiet-hours.ts`
-- `hooks/ping/schedule.ts` — jedna odpowiedzialność bez zmian: kiedy i co sprawdza tick (start
-  na pełnej minucie w `startTicking`, `case 'quiet'` w `keepWarm`); zależy od:
-  `hooks/cache-timing.ts`,
+- `hooks/quiet-hours.ts` (nowy) — odczyt opcji ciszy do wartości: typ `QuietHours`,
+  `parseQuietHours`; czysty; zależy od: brak
+- `hooks/ping/decide-ping.ts` — `isQuiet` i krok `'quiet'` w `decidePing`; zależy od:
+  `hooks/quiet-hours.ts`
+- `hooks/ping/schedule.ts` — `case 'quiet'` w `keepWarm`; traci `TICK_MS`; zależy od:
   `hooks/ping/decide-ping.ts`
 - `hooks/ping/ping.ts` — ponowienie po 60 s; zależy od: brak
-- `hooks/events/session.ts` — jedna odpowiedzialność bez zmian: start sesji (w nim toast o
-  błędnej opcji i start ticku przez `startTicking`); zależy od:
-  `hooks/quiet-hours.ts`, `hooks/ping/schedule.ts`
+- `hooks/events/session.ts` — toast o błędnej opcji, start ticku na pełnej minucie
+  (`startTicking`, `TICK_MS`); zależy od: `hooks/cache-timing.ts`, `hooks/command.ts`,
+  `hooks/ping/schedule.ts`
 - `hooks/register.tsx` — czyta opcje `quiet_hours` i `quiet_range` do `live.quiet`; zależy od:
   `hooks/quiet-hours.ts`
 - `hooks/state.ts` — `live.quiet`, `quiet` w `readSnapshot`; zależy od: `hooks/quiet-hours.ts`
 - `hooks/session-snapshot.ts` — pole `quiet: QuietHours`; zależy od: `hooks/quiet-hours.ts`
+- `hooks/format.ts` — `clockOfDay` (godzina z minut od północy); zależy od: brak
 - `hooks/line/line-model.ts` — detal ciszy, ton `stalled`, termin pingu na pełnej minucie; zależy
-  od: `hooks/quiet-hours.ts`, `hooks/cache-timing.ts`
-- `hooks/command.ts` — linia ciszy w `statusText`; zależy od: `hooks/quiet-hours.ts`
+  od: `hooks/quiet-hours.ts`, `hooks/ping/decide-ping.ts`, `hooks/format.ts`,
+  `hooks/cache-timing.ts`
+- `hooks/command.ts` — linia ciszy w `statusText`, `quietNotUnderstood`; zależy od:
+  `hooks/quiet-hours.ts`, `hooks/format.ts`
 - `hooks/cache-timing.ts` — `DEFAULT_MAX_PINGS = 6`; zależy od: brak
 - `.claude-plugin/plugin.json` — opcje `quiet_hours`, `quiet_range`; `max_pings` domyślnie 6;
   zależy od: brak
@@ -89,11 +91,8 @@ keep-warm zostaje włączony, a po requeście o 08:10 ping wychodzi o 09:02.
     `QuietOn = { kind: 'on', startMin: number, endMin: number }`,
     `QuietInvalid = { kind: 'invalid', setting: 'switch' | 'range', text: string }`
     (`setting`: która opcja jest błędna);
-  - `parseQuietHours(isOn: unknown, range: unknown): QuietHours`;
-  - `isQuiet(ms: number, quiet: QuietHours): boolean`;
-  - `formatQuietRange(quiet: QuietOn): string` (`"21:30–08:00"`), `formatQuietEnd(quiet: QuietOn):
-    string` (`"08:00"`);
-  - `quietNotUnderstood(quiet: QuietInvalid): string`.
+  - `parseQuietHours(isOn: unknown, range: unknown): QuietHours`.
+- Produkuje (`hooks/ping/decide-ping.ts`): `isQuiet(ms: number, quiet: QuietHours): boolean`.
 - Produkuje też: `PingCheck.quiet: QuietHours`, `PingStep` z `'quiet'`,
   `SessionSnapshot.quiet: QuietHours`, `live.quiet: QuietHours`.
 
@@ -108,13 +107,13 @@ keep-warm zostaje włączony, a po requeście o 08:10 ping wychodzi o 09:02.
 
 **Reguły stosowalne:**
 
-- `modul-odczyt-decyzja-render` — parsowanie i decyzja ciszy w czystym `quiet-hours.ts`;
-  `register.tsx` tylko czyta opcje, `schedule.ts` tylko wykonuje krok.
+- `modul-odczyt-decyzja-render` — odczyt opcji w czystym `quiet-hours.ts`, decyzja `isQuiet` w
+  `decide-ping.ts`; `register.tsx` tylko czyta opcje, `schedule.ts` tylko wykonuje krok.
 - `pokayoke-walidacja-wejscia` — opcje walidowane na granicy (`register`), dalej płynie typ
   `QuietHours`, nie surowy tekst.
 - `pokayoke-bledy-niemozliwe` — unia z `kind` zamiast flag; `invalid` niesie tekst do komunikatu.
 - `bledy-bez-null` — parser zwraca `invalid` zamiast `null`/wyjątku.
-- `nazwy-czesci-mowy` — predykat `isQuiet`, akcje `parse…`/`format…`, typ rzeczownikiem.
+- `nazwy-czesci-mowy` — predykat `isQuiet`, akcja `parse…`, typ rzeczownikiem.
 - `tdd-test-najpierw` — Kroki 1-2 przed kodem.
 - `dok-ten-sam-commit` — README (opcje, „What it reads”, FAQ) i `.claude/CLAUDE.md` w tym commicie.
 
@@ -124,10 +123,12 @@ keep-warm zostaje włączony, a po requeście o 08:10 ping wychodzi o 09:02.
 
 - [ ] **Krok 1: Napisz failing test**
 
-W `tests/decisions.test.ts` dopisz import po imporcie `decide-ping`:
+W `tests/decisions.test.ts` import z `../hooks/ping/decide-ping` zmień na poniższy i dopisz po nim
+import z `../hooks/quiet-hours`:
 
 ```ts
-import { isQuiet, parseQuietHours } from '../hooks/quiet-hours'
+import { decidePing, isQuiet, isTooFullForVisiblePing, type PingCheck } from '../hooks/ping/decide-ping'
+import { parseQuietHours } from '../hooks/quiet-hours'
 ```
 
 Po stałej `HOUR` (linia 13) dodaj:
@@ -211,16 +212,16 @@ claude plugin test .
 ```
 
 Oczekiwany output: FAIL — pliki `decisions.test.ts` i `savings.test.ts` nie ładują się
-(`../hooks/quiet-hours` nie istnieje), test `no ping in the quiet hours…` daje
-`expect(engine.forks).toEqual(0)` z wartością 1.
+(`../hooks/quiet-hours` nie istnieje, `decide-ping` nie eksportuje `isQuiet`), test `no ping in
+the quiet hours…` daje `expect(engine.forks).toEqual(0)` z wartością 1.
 
 - [ ] **Krok 3: Zaimplementuj minimalnie**
 
 Utwórz `hooks/quiet-hours.ts`:
 
 ```ts
-// Quiet hours: the local times of day keep-warm sends no ping without a stop time. Pure: the
-// options come in from register.tsx, the decisions and the words go out.
+// Quiet hours: the local times of day keep-warm sends no ping without a stop time, read from the
+// plugin's options into a value. Pure: the options come in from register.tsx.
 export type QuietOff = { kind: 'off' }
 // Minutes since local midnight; the range runs across midnight when the start is later.
 export type QuietOn = { kind: 'on', startMin: number, endMin: number }
@@ -254,7 +255,23 @@ function minuteOfDay(hours: string, mins: string) {
   const [h, m] = [Number(hours), Number(mins)]
   return h <= 23 && m <= 59 ? h * HOUR_MIN + m : -1
 }
+```
 
+W `hooks/ping/decide-ping.ts`:
+
+```ts
+import type { QuietHours } from '../quiet-hours'
+```
+
+po imporcie `cache-timing` dodaj stałą, a za `isInPingWindow` predykat:
+
+```ts
+const HOUR_MIN = 60
+```
+
+```ts
+// Whether a moment falls in the quiet hours, in local time; a setting that could not be read
+// counts as quiet all day, so nothing goes out until it is fixed.
 export function isQuiet(ms: number, quiet: QuietHours) {
   if (quiet.kind === 'off') return false
   if (quiet.kind === 'invalid') return true
@@ -263,32 +280,6 @@ export function isQuiet(ms: number, quiet: QuietHours) {
   const { startMin, endMin } = quiet
   return startMin < endMin ? minute >= startMin && minute < endMin : minute >= startMin || minute < endMin
 }
-
-export function formatQuietRange(quiet: QuietOn) {
-  return `${clockOf(quiet.startMin)}–${clockOf(quiet.endMin)}`
-}
-
-export function formatQuietEnd(quiet: QuietOn) {
-  return clockOf(quiet.endMin)
-}
-
-// Names the option to fix and the form it takes.
-export function quietNotUnderstood({ setting, text }: QuietInvalid) {
-  const option = setting === 'switch' ? 'Quiet hours setting' : 'Quiet hours range'
-  const form = setting === 'switch' ? 'on or off' : 'HH:MM-HH:MM'
-  return `${option} "${text}" not understood (use ${form}); keep-warm will not ping until it is fixed.`
-}
-
-function clockOf(minuteOfDay: number) {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${pad(Math.floor(minuteOfDay / HOUR_MIN))}:${pad(minuteOfDay % HOUR_MIN)}`
-}
-```
-
-W `hooks/ping/decide-ping.ts`:
-
-```ts
-import { isQuiet, type QuietHours } from '../quiet-hours'
 ```
 
 do `PingCheck` dopisz pole `quiet: QuietHours` (po `nearlyFull`), typ kroku i decyzję zmień na:
@@ -377,7 +368,11 @@ table above, quiet hours included.”, a punkt „**The clock.**” zmień na �
 local time of day for the quiet hours.”
 
 W `.claude/CLAUDE.md`: w punkcie `register.tsx` zamień „the three userConfig options” na „the
-five userConfig options”; w sekcji „Behaviour agreed with the owner” po punkcie „In a row”
+five userConfig options”; w liście modułów czystych po `session-snapshot.ts` dopisz
+`quiet-hours.ts`, a po punkcie `cache-timing.ts` punkt „- `quiet-hours.ts`: the quiet-hours
+options read into a value (`parseQuietHours`).”; w punkcie `ping/` zamień „`decide-ping.ts`
+decides when and which ping (pure)” na „`decide-ping.ts` decides when and which ping, quiet hours
+included (`isQuiet`; pure)”; w sekcji „Behaviour agreed with the owner” po punkcie „In a row”
 dopisz:
 
 ```markdown
@@ -411,6 +406,7 @@ ciszy.
 
 **Pliki:**
 
+- Zmodyfikuj: `hooks/format.ts`
 - Zmodyfikuj: `hooks/line/line-model.ts`
 - Zmodyfikuj: `hooks/command.ts`
 - Zmodyfikuj: `hooks/events/session.ts`
@@ -421,11 +417,11 @@ ciszy.
 
 **Interfejsy:**
 
-- Konsumuje: `isQuiet`, `formatQuietEnd`, `formatQuietRange`, `quietNotUnderstood`, typy
-  `QuietHours`, `QuietOn` z `hooks/quiet-hours.ts`; `SessionSnapshot.quiet`; `live.quiet` z
-  `hooks/state.ts` (Task 1).
-- Produkuje: brak nowych eksportów; zmienia teksty `lineModel(...).details` i
-  `statusText(session, maxPings)`.
+- Konsumuje: typy `QuietHours`, `QuietInvalid` z `hooks/quiet-hours.ts`; `isQuiet` z
+  `hooks/ping/decide-ping.ts`; `SessionSnapshot.quiet`; `live.quiet` z `hooks/state.ts` (Task 1).
+- Produkuje: `clockOfDay(minuteOfDay: number): string` w `hooks/format.ts` (`"08:00"`);
+  `quietNotUnderstood(quiet: QuietInvalid): string` w `hooks/command.ts`; zmienia teksty
+  `lineModel(...).details` i `statusText(session, maxPings)`.
 
 **Wzorce:**
 
@@ -438,7 +434,7 @@ ciszy.
 **Reguły stosowalne:**
 
 - `modul-odczyt-decyzja-render` — tekst i ton linii decyduje czysty `line-model.ts`; `session.ts`
-  tylko wyświetla toast z tekstem z `quiet-hours.ts`.
+  tylko wyświetla toast z tekstem z `command.ts`.
 - `funkcja-krotka` — termin pingu (`nextPingAt`) i warunek ciszy (`isHeldByQuiet`) jako osobne
   funkcje zamiast rozbudowy `nextPingDetails`.
 - `tdd-jedna-intencja` — osobne testy: detal linii, status, widoczny ping.
@@ -529,10 +525,23 @@ Oczekiwany output: FAIL — `lineModel: a ping that would fall in the quiet hour
 
 - [ ] **Krok 3: Zaimplementuj minimalnie**
 
-W `hooks/line/line-model.ts` importy:
+W `hooks/format.ts` po `clockTime` dodaj:
 
 ```ts
-import { formatQuietEnd, isQuiet, type QuietHours } from '../quiet-hours'
+// A time of day given as minutes since midnight, as the quiet hours keep it.
+export function clockOfDay(minuteOfDay: number) {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(Math.floor(minuteOfDay / 60))}:${pad(minuteOfDay % 60)}`
+}
+```
+
+W `hooks/line/line-model.ts` import z `../format` zmień na pierwszą linię niżej i dopisz dwie
+kolejne:
+
+```ts
+import { cacheLength, clockOfDay, clockTime, minutes, timeLeft, tokens } from '../format'
+import { isQuiet } from '../ping/decide-ping'
+import type { QuietHours } from '../quiet-hours'
 ```
 
 Po `NEARLY_FULL_TEXT` dopisz:
@@ -561,7 +570,7 @@ function isHeldByQuiet(session: SessionSnapshot, countdown: Countdown) {
 }
 
 function quietDetail(quiet: QuietHours) {
-  return quiet.kind === 'on' ? `${NEXT_ICON} no ping: quiet hours to ${formatQuietEnd(quiet)}` : QUIET_NOT_UNDERSTOOD_TEXT
+  return quiet.kind === 'on' ? `${NEXT_ICON} no ping: quiet hours to ${clockOfDay(quiet.endMin)}` : QUIET_NOT_UNDERSTOOD_TEXT
 }
 ```
 
@@ -580,10 +589,11 @@ function nextPingDetails(session: SessionSnapshot, countdown: Countdown) {
 }
 ```
 
-W `hooks/command.ts` dopisz import:
+W `hooks/command.ts` import z `./format` zmień na pierwszą linię niżej i dopisz drugą:
 
 ```ts
-import { formatQuietRange, quietNotUnderstood, type QuietHours } from './quiet-hours'
+import { cacheLength, clockOfDay, clockTime, minutes, tokens } from './format'
+import type { QuietHours, QuietInvalid } from './quiet-hours'
 ```
 
 W `statusText` po deklaracji `lines` (przed linią o `needsVisiblePing`) dopisz:
@@ -598,11 +608,19 @@ i po `statusText` dodaj:
 function quietLine(quiet: QuietHours) {
   if (quiet.kind === 'off') return 'Quiet hours: off.'
   if (quiet.kind === 'invalid') return quietNotUnderstood(quiet)
-  return `Quiet hours ${formatQuietRange(quiet)}: no pings then (a stop time overrides them).`
+  return `Quiet hours ${clockOfDay(quiet.startMin)}–${clockOfDay(quiet.endMin)}: no pings then (a stop time overrides them).`
+}
+
+// Names the option to fix and the form it takes; the status and the start notice say it.
+export function quietNotUnderstood({ setting, text }: QuietInvalid) {
+  const option = setting === 'switch' ? 'Quiet hours setting' : 'Quiet hours range'
+  const form = setting === 'switch' ? 'on or off' : 'HH:MM-HH:MM'
+  return `${option} "${text}" not understood (use ${form}); keep-warm will not ping until it is fixed.`
 }
 ```
 
-W `hooks/events/session.ts` dopisz import `import { quietNotUnderstood } from '../quiet-hours'` i
+W `hooks/events/session.ts` import `import { COMMAND } from '../command'` zmień na
+`import { COMMAND, quietNotUnderstood } from '../command'` i
 w `startSession` po `await forgetOldSessions(...)` dodaj:
 
 ```ts
@@ -616,7 +634,10 @@ W `README.md` w tabeli linii po wierszu `**󰁔 ping 14:07**` dopisz:
 | **quiet hours setting not understood** | Keep-warm cannot read the **Quiet hours** or **Quiet hours range** setting, so it sends no ping until you fix it (on or off; `HH:MM-HH:MM`, for example `21:30-08:00`). A notice and `/keepwarm status` name the setting. |
 ```
 
-W `.claude/CLAUDE.md` na końcu punktu „Quiet hours (ckw-eg7…)” dopisz zdanie: „The line says so
+W `.claude/CLAUDE.md` punkt `format.ts` zmień na „- `format.ts`: minutes, clock time (also of a
+time of day, `clockOfDay`), token counts.”; w punkcie `command.ts` po „`parseStop` and
+`statusText` are pure” dopisz „, like `quietNotUnderstood` (the status and the start notice)”. Na
+końcu punktu „Quiet hours (ckw-eg7…)” dopisz zdanie: „The line says so
 before the ping would fall in them: `󰁔 no ping: quiet hours to 08:00` in mustard, with the expiry
 clock; the ping time on the line is the full minute the tick sends it at.”
 
@@ -631,7 +652,7 @@ Oczekiwany output: wszystkie testy `pass`, `0 fail`.
 - [ ] **Krok 5: Commit**
 
 ```bash
-git add hooks/line/line-model.ts hooks/command.ts hooks/events/session.ts README.md .claude/CLAUDE.md tests/decisions.test.ts tests/keep-warm.test.ts &&
+git add hooks/format.ts hooks/line/line-model.ts hooks/command.ts hooks/events/session.ts README.md .claude/CLAUDE.md tests/decisions.test.ts tests/keep-warm.test.ts &&
   git commit -m "ckw-eg7: linia, status i toast mówią o ciszy"
 ```
 
@@ -654,8 +675,9 @@ wraca po 60 s.
 **Interfejsy:**
 
 - Konsumuje: `tick($)` z `hooks/ping/schedule.ts`; `MINUTE_MS` z `hooks/cache-timing.ts`.
-- Produkuje: `startTicking($: EngineInterface): Promise<void>` w `hooks/ping/schedule.ts`;
-  `TICK_MS` przestaje być eksportowany.
+- Produkuje: brak nowych eksportów; `TICK_MS` przechodzi z `hooks/ping/schedule.ts` do
+  `hooks/events/session.ts` (prywatny, obok `TITLE_SYNC_MS`), a start ticku do prywatnej
+  `startTicking` w `session.ts`, gdzie startują pozostałe zegary sesji.
 
 **Wzorce:**
 
@@ -736,17 +758,35 @@ wartością 1: stary tick co 15 s od 10:00:30 trafia w 10:52:30).
 
 - [ ] **Krok 3: Zaimplementuj minimalnie**
 
-W `hooks/ping/schedule.ts` zmień komentarz pliku na „// The check every minute: refresh what the
-line shows, then ping when it is time.”, a stałą `TICK_MS` z komentarzem zastąp:
+W `hooks/ping/schedule.ts` zmień komentarz pliku na „// The check each tick: refresh what the
+line shows, then ping when it is time.”, usuń stałą `TICK_MS` z jej komentarzem i dopisz ten
+komentarz nad `tick`:
 
 ```ts
-// One check a minute, on the full minute: local reads only (clock, session figures, settings),
-// no model call. The line is redrawn only when its text changes, at most once a minute.
-const TICK_MS = MINUTE_MS
+// Local reads only (clock, session figures, settings), no model call. The line is redrawn only
+// when its text changes, at most once a minute.
+```
 
-// The first check right away, then one on every full minute, so the ping goes out at the minute
-// the line names. The repeat is set before the check runs: a slow check cannot delay it.
-export async function startTicking($: EngineInterface) {
+W `hooks/events/session.ts` import `import { tick, TICK_MS } from '../ping/schedule'` zmień na
+`import { tick } from '../ping/schedule'`, po `TITLE_SYNC_MS` dodaj:
+
+```ts
+// One check a minute, on the full minute, so the ping goes out at the minute the line names.
+const TICK_MS = MINUTE_MS
+```
+
+w `startSession` linie `await tick($)` i `$.clock.every(TICK_MS, () => void tick($))` zastąp:
+
+```ts
+  await startTicking($)
+```
+
+a po `startSession` dodaj:
+
+```ts
+// The first check right away, then one on every full minute. The repeat is set before the check
+// runs: a slow check cannot delay it.
+async function startTicking($: EngineInterface) {
   await tick($)
   const now = await $.clock.now()
   $.clock.after(TICK_MS - (now % TICK_MS), () => {
@@ -754,14 +794,6 @@ export async function startTicking($: EngineInterface) {
     void tick($)
   })
 }
-```
-
-W `hooks/events/session.ts` import `import { tick, TICK_MS } from '../ping/schedule'` zmień na
-`import { startTicking } from '../ping/schedule'`, a w `startSession` linie
-`await tick($)` i `$.clock.every(TICK_MS, () => void tick($))` zastąp:
-
-```ts
-  await startTicking($)
 ```
 
 W `hooks/ping/ping.ts`:
@@ -778,8 +810,8 @@ zmień na „It checks these once a minute, on your computer…”; w tabeli zda
 
 W `.claude/CLAUDE.md`:
 
-- w punkcie `ping/` zamień „`schedule.ts` is the 15-s tick” na „`schedule.ts` is the tick, once a
-  minute on the full minute”;
+- w punkcie `ping/` zamień „`schedule.ts` is the 15-s tick” na „`schedule.ts` is the check each
+  minute (`events/session.ts` starts it on the full minute)”;
 - w „Checking a change” zamień „runs ~1900 ticks (~3 s)” na „runs ~470 one-minute ticks (under
   1 s)”;
 - w „Behaviour agreed with the owner” zamień „retry every 30 s on failure” na „retry after 60 s
