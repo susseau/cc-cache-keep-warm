@@ -51,7 +51,7 @@ test('the ping goes out 8 min before expiry and restarts the hour', async ($, on
   expect((await keepwarm($, 'status')).split('\n').at(-1)).toEqual('10:52 · read 50k from cache')
 })
 
-test('a failing API is retried after 30 s; a refused request stops with its status', async ($, on) => {
+test('a failing API is retried after 60 s; a refused request stops with its status', async ($, on) => {
   const { engine, clock } = stubEngine(on)
   await start($)
   await answer($, engine, WRITE)
@@ -59,12 +59,38 @@ test('a failing API is retried after 30 s; a refused request stops with its stat
   engine.fork = { isAnswered: false, reason: 'api-error', status: 529 }
   await clock.advance(52 * MINUTE)
   expect(engine.forks).toEqual(1)
-  await clock.advance(30_000)
+  expect(engine.toasts.at(-1)).toEqual('Keep-warm ping failed (HTTP 529); retrying in 60 s.')
+  await clock.advance(MINUTE)
   expect(engine.forks).toEqual(2)
   engine.fork = { isAnswered: false, reason: 'api-error', status: 400 }
-  await clock.advance(30_000)
+  await clock.advance(MINUTE)
   expect(engine.toasts.at(-1)).toEqual('Keep-warm ping failed (HTTP 400); the cache will expire normally.')
-  expect(await line($)).toEqual('ping failed: HTTP 400·after 11:00 your next message re-writes 54k·7 min left•····· 󰓛 Stop ')
+  expect(await line($)).toEqual('ping failed: HTTP 400·after 11:00 your next message re-writes 54k·6 min left•····· 󰓛 Stop ')
+})
+
+test('the check runs on the full minute: the ping goes out at the minute the line names', async ($, on) => {
+  const { engine, clock } = stubEngine(on)
+  await clock.advance(30_000)
+  await start($)
+  await answer($, engine, WRITE)
+  await keepwarm($, 'on')
+  expect(await line($)).toContain('󰁔 ping 10:53')
+  // 10:52:30: the window opened at 10:52:30, but the next check is at 10:53:00.
+  await clock.advance(52 * MINUTE)
+  expect(engine.forks).toEqual(0)
+  await clock.advance(30_000)
+  expect(engine.forks).toEqual(1)
+})
+
+test('the first check after a start between full minutes waits for the minute the line names', async ($, on) => {
+  const { engine, clock } = stubEngine(on, { store: { 'session:S1': { ...SAVED_ON, lastRequestAt: START, savedAt: START } } })
+  // 10:52:30, reopened after a relaunch: the window opened at 10:52, the line names 10:53.
+  await clock.advance(52 * MINUTE + 30_000)
+  await start($)
+  expect(await line($)).toContain('󰁔 ping 10:53')
+  expect(engine.submitted).toEqual([])
+  await clock.advance(30_000)
+  expect(engine.submitted.length).toEqual(1)
 })
 
 test('keep-warm stops itself after 8 pings in a row (the default; the kit cannot pass max_pings)', async ($, on) => {
@@ -145,7 +171,7 @@ test('a paused keep-warm still shows what its pings cost', async ($, on) => {
   await answer($, engine, WRITE)
   await keepwarm($, 'on')
   engine.fork = { isAnswered: true, usage: WRITE }
-  await clock.advance(52 * MINUTE + 15_000)
+  await clock.advance(53 * MINUTE)
   expect(await line($)).toContain('keep-warm paused·󰆼 cost 100k')
 })
 
@@ -278,7 +304,7 @@ test('a ping that finds the cache cold pauses keep-warm', async ($, on) => {
   expect(engine.forks).toEqual(1)
   expect(await line($)).toContain('1 ping ✗')
   // The next check takes the shorter length.
-  await clock.advance(15_000)
+  await clock.advance(MINUTE)
   expect(await line($)).toContain('cache expired after 52 min, sooner than expected')
 })
 
@@ -286,7 +312,7 @@ test('a resume tells the time of the last answer', async ($, on) => {
   const { clock } = stubEngine(on)
   await start($)
   await $.classic.SessionStart({ session_id: 'S1', transcript_path: '/t', cwd: '/work', hook_event_name: 'SessionStart', source: 'resume', seconds_since_last_response: 600, context_tokens: 80_000 } as any)
-  await clock.advance(15_000)
+  await clock.advance(MINUTE)
   expect(await line($)).toEqual('󰔟 expires 10:47·54k cached·46 min left•••••· 󰐊 Warm ')
 })
 

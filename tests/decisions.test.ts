@@ -203,6 +203,14 @@ test('lineModel: a ping that would fall in the quiet hours is named', async () =
   expect(unread.details).toEqual(['󰔟 expires 11:00', 'quiet hours setting not understood', '54k cached'])
 })
 
+test('lineModel: the ping time is the full minute the check sends it at', async () => {
+  // 20:37:30: due at 21:29:30, sent by the check at 21:30, the start of the quiet hours.
+  const evening = at(20, 37) + 30_000
+  expect(lineModel(snapshot({ isOn: true, lastRequestAt: evening, now: evening })).details).toEqual(['󰔟 expires 21:37', '󰁔 no ping: quiet hours to 08:00', '54k cached'])
+  // 21:29:40, the window already open: the next check is at 21:30.
+  expect(lineModel(snapshot({ isOn: true, quiet: { kind: 'off' }, lastRequestAt: at(20, 37), now: at(21, 29) + 40_000 })).details).toContain('󰁔 ping 21:30')
+})
+
 test('statusText: the quiet hours while keep-warm is on', async () => {
   const lines = (quiet: QuietHours) => statusText(snapshot({ isOn: true, quiet }), 6).split('\n')
   expect(lines(QUIET)[1]).toEqual('Quiet hours 21:30–08:00: no pings then (a stop time overrides them).')

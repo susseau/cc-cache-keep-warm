@@ -1,4 +1,4 @@
-// The check every TICK_MS: refresh what the line shows, then ping when it is time.
+// The check each tick: refresh what the line shows, then ping when it is time.
 import type { EngineInterface, SessionUsage } from 'claude-code'
 
 import type { KeepWarmTtl } from '../../types'
@@ -12,12 +12,11 @@ import { correctTtl } from '../ttl/decide-ttl'
 import { decidePing } from './decide-ping'
 import { checkRoom, ping, visiblePing } from './ping'
 
-// One check every 15 s: local reads only (clock, session figures, settings), no model call.
-// The line is redrawn only when its text changes, at most once a minute.
-export const TICK_MS = 15_000
 const PING_PENDING_MS = 5 * MINUTE_MS
 
-export async function tick($: EngineInterface) {
+// Local reads only (clock, session figures, settings), no model call. The line is redrawn only
+// when its text changes, at most once a minute. Without `canPing` it only refreshes the line.
+export async function tick($: EngineInterface, { canPing = true }: { canPing?: boolean } = {}) {
   const now = await $.clock.now()
   const usage = await $.session.usage()
   const before = await readSnapshot($)
@@ -25,7 +24,7 @@ export async function tick($: EngineInterface) {
   const contextTokens = await refreshShown($, { now, ttl, usage, session: before })
   // Read again: the switch or a new request may have changed while the cache length was read.
   const session = await readSnapshot($)
-  if (session.isOn) await keepWarm($, { now, ttl, usage, contextTokens, session })
+  if (session.isOn && canPing) await keepWarm($, { now, ttl, usage, contextTokens, session })
 }
 
 type Shown = { now: number, ttl: KeepWarmTtl, usage: SessionUsage, session: SessionSnapshot }

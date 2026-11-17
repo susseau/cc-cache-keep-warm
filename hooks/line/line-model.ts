@@ -64,9 +64,10 @@ function isBlocked(session: SessionSnapshot) {
   return needsVisiblePing(session) && session.nearlyFull
 }
 
-// When the next ping is due; `decidePing` checks the quiet hours at the check that sends it.
-function nextPingAt({ lastRequestAt }: SessionSnapshot, { ttlMs }: Countdown) {
-  return lastRequestAt + ttlMs - PING_LEAD_MS
+// Pings go out only on the full-minute checks: the first one in the window, or the next one when
+// the window is already open; `decidePing` checks the quiet hours at that same check.
+function nextPingAt({ lastRequestAt, now }: SessionSnapshot, { ttlMs }: Countdown) {
+  return Math.ceil(Math.max(lastRequestAt + ttlMs - PING_LEAD_MS, now) / MINUTE_MS) * MINUTE_MS
 }
 
 // The next ping would fall in the quiet hours and no stop time overrides them: none goes out.
