@@ -25,20 +25,24 @@ przez `$.clock.after`, potem `$.clock.every(60 s)`.
 
 ## File Structure
 
-- `hooks/quiet-hours.ts` (nowy) — typ `QuietHours`, `parseQuietHours`, `isQuiet`,
-  `formatQuietRange`, `formatQuietEnd`, `quietNotUnderstood`; czysty; zależy od: brak
+- `hooks/quiet-hours.ts` (nowy) — jedna odpowiedzialność: pojęcie ciszy jako czysta wartość (jak
+  `cache-timing.ts` dla długości cache): typ `QuietHours`, `parseQuietHours`, `isQuiet`,
+  `formatQuietRange`, `formatQuietEnd`, `quietNotUnderstood`; bez `$`; zależy od: brak
 - `hooks/ping/decide-ping.ts` — krok `'quiet'` w `decidePing`; zależy od: `hooks/quiet-hours.ts`
-- `hooks/ping/schedule.ts` — `case 'quiet'`; tick co pełną minutę (`startTicking`); zależy od:
+- `hooks/ping/schedule.ts` — jedna odpowiedzialność bez zmian: kiedy i co sprawdza tick (start
+  na pełnej minucie w `startTicking`, `case 'quiet'` w `keepWarm`); zależy od:
+  `hooks/cache-timing.ts`,
   `hooks/ping/decide-ping.ts`
 - `hooks/ping/ping.ts` — ponowienie po 60 s; zależy od: brak
-- `hooks/events/session.ts` — toast o błędnej opcji, start ticku przez `startTicking`; zależy od:
+- `hooks/events/session.ts` — jedna odpowiedzialność bez zmian: start sesji (w nim toast o
+  błędnej opcji i start ticku przez `startTicking`); zależy od:
   `hooks/quiet-hours.ts`, `hooks/ping/schedule.ts`
 - `hooks/register.tsx` — czyta opcje `quiet_hours` i `quiet_range` do `live.quiet`; zależy od:
   `hooks/quiet-hours.ts`
 - `hooks/state.ts` — `live.quiet`, `quiet` w `readSnapshot`; zależy od: `hooks/quiet-hours.ts`
 - `hooks/session-snapshot.ts` — pole `quiet: QuietHours`; zależy od: `hooks/quiet-hours.ts`
 - `hooks/line/line-model.ts` — detal ciszy, ton `stalled`, termin pingu na pełnej minucie; zależy
-  od: `hooks/quiet-hours.ts`
+  od: `hooks/quiet-hours.ts`, `hooks/cache-timing.ts`
 - `hooks/command.ts` — linia ciszy w `statusText`; zależy od: `hooks/quiet-hours.ts`
 - `hooks/cache-timing.ts` — `DEFAULT_MAX_PINGS = 6`; zależy od: brak
 - `.claude-plugin/plugin.json` — opcje `quiet_hours`, `quiet_range`; `max_pings` domyślnie 6;
@@ -83,7 +87,8 @@ keep-warm zostaje włączony, a po requeście o 08:10 ping wychodzi o 09:02.
 - Produkuje (`hooks/quiet-hours.ts`):
   - `type QuietHours = QuietOff | QuietOn | QuietInvalid`, gdzie `QuietOff = { kind: 'off' }`,
     `QuietOn = { kind: 'on', startMin: number, endMin: number }`,
-    `QuietInvalid = { kind: 'invalid', text: string }`;
+    `QuietInvalid = { kind: 'invalid', setting: 'switch' | 'range', text: string }`
+    (`setting`: która opcja jest błędna);
   - `parseQuietHours(isOn: unknown, range: unknown): QuietHours`;
   - `isQuiet(ms: number, quiet: QuietHours): boolean`;
   - `formatQuietRange(quiet: QuietOn): string` (`"21:30–08:00"`), `formatQuietEnd(quiet: QuietOn):
@@ -143,12 +148,12 @@ test('parseQuietHours: the default, off, a range to the minute, and what it cann
   expect(parseQuietHours(true, '22:00-7:30')).toEqual({ kind: 'on', startMin: 22 * 60, endMin: 7 * 60 + 30 })
   expect(parseQuietHours(undefined, ' 1:05 - 6:45 ')).toEqual({ kind: 'on', startMin: 65, endMin: 6 * 60 + 45 })
   expect(parseQuietHours(false, 'nights')).toEqual({ kind: 'off' })
-  expect(parseQuietHours(true, '24:00-08:00')).toEqual({ kind: 'invalid', text: '24:00-08:00' })
-  expect(parseQuietHours(true, '21:60-08:00')).toEqual({ kind: 'invalid', text: '21:60-08:00' })
-  expect(parseQuietHours(true, '08:00-08:00')).toEqual({ kind: 'invalid', text: '08:00-08:00' })
-  expect(parseQuietHours(true, 'nights')).toEqual({ kind: 'invalid', text: 'nights' })
-  expect(parseQuietHours(true, 2130)).toEqual({ kind: 'invalid', text: '2130' })
-  expect(parseQuietHours('yes', '21:30-08:00')).toEqual({ kind: 'invalid', text: 'yes' })
+  expect(parseQuietHours(true, '24:00-08:00')).toEqual({ kind: 'invalid', setting: 'range', text: '24:00-08:00' })
+  expect(parseQuietHours(true, '21:60-08:00')).toEqual({ kind: 'invalid', setting: 'range', text: '21:60-08:00' })
+  expect(parseQuietHours(true, '08:00-08:00')).toEqual({ kind: 'invalid', setting: 'range', text: '08:00-08:00' })
+  expect(parseQuietHours(true, 'nights')).toEqual({ kind: 'invalid', setting: 'range', text: 'nights' })
+  expect(parseQuietHours(true, 2130)).toEqual({ kind: 'invalid', setting: 'range', text: '2130' })
+  expect(parseQuietHours('yes', '21:30-08:00')).toEqual({ kind: 'invalid', setting: 'switch', text: 'yes' })
 })
 
 test('isQuiet: from the start, up to the end, across midnight or not; an unread setting is always quiet', async () => {
@@ -162,7 +167,7 @@ test('isQuiet: from the start, up to the end, across midnight or not; an unread 
   expect(isQuiet(at(13), lunch)).toEqual(false)
   expect(isQuiet(at(3), lunch)).toEqual(false)
   expect(isQuiet(at(3), { kind: 'off' })).toEqual(false)
-  expect(isQuiet(at(12), { kind: 'invalid', text: 'nights' })).toEqual(true)
+  expect(isQuiet(at(12), { kind: 'invalid', setting: 'range', text: 'nights' })).toEqual(true)
 })
 
 test('decidePing: no ping in the quiet hours unless a stop time was given', async () => {
@@ -172,7 +177,7 @@ test('decidePing: no ping in the quiet hours unless a stop time was given', asyn
   expect(decidePing(check({ ...evening, stopAt: at(23) }))).toEqual('ping')
   expect(decidePing(check({ ...evening, stopAt: at(21) }))).toEqual('stop-at-time')
   expect(decidePing(check({ lastRequestAt: at(21), now: at(21, 30) }))).toEqual('none')
-  expect(decidePing(check({ quiet: { kind: 'invalid', text: 'nights' } }))).toEqual('quiet')
+  expect(decidePing(check({ quiet: { kind: 'invalid', setting: 'range', text: 'nights' } }))).toEqual('quiet')
 })
 ```
 
@@ -220,7 +225,7 @@ export type QuietOff = { kind: 'off' }
 // Minutes since local midnight; the range runs across midnight when the start is later.
 export type QuietOn = { kind: 'on', startMin: number, endMin: number }
 // A setting that could not be read: no ping until it is fixed, never a silent fallback.
-export type QuietInvalid = { kind: 'invalid', text: string }
+export type QuietInvalid = { kind: 'invalid', setting: 'switch' | 'range', text: string }
 export type QuietHours = QuietOff | QuietOn | QuietInvalid
 
 const DEFAULT_RANGE = '21:30-08:00'
@@ -230,12 +235,12 @@ const HOUR_MIN = 60
 // The `quiet_hours` switch and the `quiet_range` text as they come from the plugin's options.
 export function parseQuietHours(isOn: unknown, range: unknown): QuietHours {
   if (isOn === false) return { kind: 'off' }
-  if (isOn !== undefined && isOn !== true) return { kind: 'invalid', text: String(isOn) }
+  if (isOn !== undefined && isOn !== true) return { kind: 'invalid', setting: 'switch', text: String(isOn) }
   return parseRange(range ?? DEFAULT_RANGE)
 }
 
 function parseRange(range: unknown): QuietHours {
-  const invalid: QuietInvalid = { kind: 'invalid', text: String(range) }
+  const invalid: QuietInvalid = { kind: 'invalid', setting: 'range', text: String(range) }
   const match = typeof range === 'string' ? RANGE.exec(range) : undefined
   if (!match) return invalid
   const startMin = minuteOfDay(match[1], match[2])
@@ -267,8 +272,11 @@ export function formatQuietEnd(quiet: QuietOn) {
   return clockOf(quiet.endMin)
 }
 
-export function quietNotUnderstood(quiet: QuietInvalid) {
-  return `Quiet hours setting "${quiet.text}" not understood (use HH:MM-HH:MM); keep-warm will not ping until it is fixed.`
+// Names the option to fix and the form it takes.
+export function quietNotUnderstood({ setting, text }: QuietInvalid) {
+  const option = setting === 'switch' ? 'Quiet hours setting' : 'Quiet hours range'
+  const form = setting === 'switch' ? 'on or off' : 'HH:MM-HH:MM'
+  return `${option} "${text}" not understood (use ${form}); keep-warm will not ping until it is fixed.`
 }
 
 function clockOf(minuteOfDay: number) {
@@ -459,7 +467,7 @@ test('lineModel: a ping that would fall in the quiet hours is named, from the fu
   expect(lineModel(snapshot({ isOn: true, lastRequestAt: earlier, now: earlier })).details).toEqual(['󰁔 ping 21:29', '54k cached'])
   const stopped = lineModel(snapshot({ isOn: true, lastRequestAt: evening, now: evening, stopAt: at(23) }))
   expect(stopped.details).toEqual(['keep-warm stops 23:00', '󰁔 ping 21:30', '54k cached'])
-  const unread = lineModel(snapshot({ isOn: true, quiet: { kind: 'invalid', text: 'nights' } }))
+  const unread = lineModel(snapshot({ isOn: true, quiet: { kind: 'invalid', setting: 'range', text: 'nights' } }))
   expect(unread.details).toEqual(['󰔟 expires 11:00', 'quiet hours setting not understood', '54k cached'])
 })
 
@@ -467,7 +475,8 @@ test('statusText: the quiet hours while keep-warm is on', async () => {
   const lines = (quiet: QuietHours) => statusText(snapshot({ isOn: true, quiet }), 6).split('\n')
   expect(lines(QUIET)[1]).toEqual('Quiet hours 21:30–08:00: no pings then (a stop time overrides them).')
   expect(lines({ kind: 'off' })[1]).toEqual('Quiet hours: off.')
-  expect(lines({ kind: 'invalid', text: 'nights' })[1]).toEqual('Quiet hours setting "nights" not understood (use HH:MM-HH:MM); keep-warm will not ping until it is fixed.')
+  expect(lines({ kind: 'invalid', setting: 'range', text: 'nights' })[1]).toEqual('Quiet hours range "nights" not understood (use HH:MM-HH:MM); keep-warm will not ping until it is fixed.')
+  expect(lines({ kind: 'invalid', setting: 'switch', text: 'yes' })[1]).toEqual('Quiet hours setting "yes" not understood (use on or off); keep-warm will not ping until it is fixed.')
   expect(statusText(snapshot({}), 6)).not.toContain('Quiet hours')
 })
 ```
@@ -604,7 +613,7 @@ W `README.md` w tabeli linii po wierszu `**󰁔 ping 14:07**` dopisz:
 
 ```markdown
 | **󰁔 no ping: quiet hours to 08:00** | The next ping would fall in your quiet hours, so keep-warm sends none: the bar turns mustard and the line shows when the cache expires. After your next message keep-warm carries on. A stop time overrides the quiet hours. |
-| **quiet hours setting not understood** | Keep-warm cannot read the **Quiet hours range** setting, so it sends no ping until you fix it (`HH:MM-HH:MM`, for example `21:30-08:00`). |
+| **quiet hours setting not understood** | Keep-warm cannot read the **Quiet hours** or **Quiet hours range** setting, so it sends no ping until you fix it (on or off; `HH:MM-HH:MM`, for example `21:30-08:00`). A notice and `/keepwarm status` name the setting. |
 ```
 
 W `.claude/CLAUDE.md` na końcu punktu „Quiet hours (ckw-eg7…)” dopisz zdanie: „The line says so
