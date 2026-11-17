@@ -24,13 +24,13 @@ function parseRange(range: unknown): QuietHours {
   const invalid: QuietInvalid = { kind: 'invalid', setting: 'range', text: String(range) }
   const match = typeof range === 'string' ? RANGE.exec(range) : undefined
   if (!match) return invalid
-  const startMin = minuteOfDay(match[1], match[2])
-  const endMin = minuteOfDay(match[3], match[4])
+  const startMin = minuteOfDay(Number(match[1]), Number(match[2]))
+  const endMin = minuteOfDay(Number(match[3]), Number(match[4]))
   if (startMin === endMin) return invalid
   return { kind: 'on', startMin, endMin }
 }
 
 // Minutes since midnight; RANGE has already checked the hour and the minute.
-function minuteOfDay(hours: string, mins: string) {
-  return Number(hours) * HOUR_MIN + Number(mins)
+function minuteOfDay(hours: number, mins: number) {
+  return hours * HOUR_MIN + mins
 }
