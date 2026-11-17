@@ -21,3 +21,6 @@ tsconfig.json
 .perles/
 graphify-out/
 .claude/settings.local.json
+
+# aby — worktree i artefakty runtime
+.aby/planning/
