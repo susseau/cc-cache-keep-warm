@@ -108,6 +108,7 @@ test('parseQuietHours: a range it cannot read is an invalid range', async () => 
   expect(parseQuietHours(true, '08:00-08:00')).toEqual({ kind: 'invalid', setting: 'range', text: '08:00-08:00' })
   expect(parseQuietHours(true, 'nights')).toEqual({ kind: 'invalid', setting: 'range', text: 'nights' })
   expect(parseQuietHours(true, 2130)).toEqual({ kind: 'invalid', setting: 'range', text: '2130' })
+  expect(parseQuietHours(true, null)).toEqual({ kind: 'invalid', setting: 'range', text: 'null' })
 })
 
 test('parseQuietHours: a switch that is neither true nor false is an invalid switch', async () => {

@@ -108,7 +108,7 @@ The line sits on the right, above the prompt. Its icons come from a [Nerd Font](
 | **󰔟 expires 14:12** | The clock time the cache expires if nothing happens. Not shown while keep-warm is holding the cache: the next ping matters then. |
 | **󰁔 ping 14:07** | When keep-warm will read the cache next. **(shows in chat)** means this ping is a short visible message, because the session hasn't answered since the app restarted. |
 | **󰁔 no ping: quiet hours to 08:00** | The next ping would fall in your quiet hours, so keep-warm sends none: the bar turns mustard and the line shows when the cache expires. After your next message keep-warm carries on. A stop time overrides the quiet hours. |
-| **quiet hours setting not understood** | Keep-warm cannot read the **Quiet hours** or **Quiet hours range** setting, so it sends no ping until you fix it (`true` or `false`; `HH:MM-HH:MM`, for example `21:30-08:00`). A notice and `/keepwarm status` name the setting. |
+| **quiet hours setting not understood** | Keep-warm cannot read the **Quiet hours** or **Quiet hours range** setting, so without a stop time it sends no ping until you fix it (`true` or `false`; `HH:MM-HH:MM`, for example `21:30-08:00`). A notice and `/keepwarm status` name the setting. |
 | **3 pings ✓** | Pings so far, and whether the last one found the cache warm (✓) or cold (✗). |
 | **󰆼 saved 90k** | What keep-warm has saved in this session so far, once it has pinged: each time you came back after a break longer than the cache and found it warm, it saved re-writing your conversation (a re-write costs 2x, a cache read 0.1x), minus what every ping cost. In input-token equivalents. **󰆼 cost 5k** while no return has paid the pings back yet. Shown while keep-warm is on. |
 | **conversation nearly full: keep-warm waits for you** | After a restart the next ping has to be the visible one, and Claude Code re-sends your project's instruction files (`CLAUDE.md`, the files it imports, `MEMORY.md`) with it. Here those would not fit next to the conversation: the ping would fail or make Claude Code compact the conversation. So keep-warm waits for your own next message. |
@@ -160,7 +160,7 @@ Keep-warm only pings a cache that lasts **30 minutes or more**: on the five-minu
 | On in new sessions | Off | Turn keep-warm on in every new session, as if you ran `/keepwarm on`. A session you reopen keeps its own switch, so one you switched off stays off |
 | Pings in a row | 6 | Without a stop time, keep-warm stops itself after this many pings in a row, one about every 52 minutes (1 to 20; 6 is about 5 hours). Any real turn in the conversation starts the count over |
 | Quiet hours | On | Without a stop time, keep-warm sends no ping in the quiet hours: the cache expires, and after your next message keep-warm carries on. A stop time (`/keepwarm 3h`, `/keepwarm until 23:30`) overrides them |
-| Quiet hours range | 21:30-08:00 | The quiet hours in your local time, `HH:MM-HH:MM`; they may run past midnight. A value keep-warm cannot read means no pings until you fix it |
+| Quiet hours range | 21:30-08:00 | The quiet hours in your local time, `HH:MM-HH:MM`; they may run past midnight. A value keep-warm cannot read means no pings without a stop time until you fix it |
 
 Change them in `/config`, or with `/plugin configure cache-keep-warm@cache-keep-warm`.
 

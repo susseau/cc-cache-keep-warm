@@ -17,7 +17,7 @@ const HOUR_MIN = 60
 export function parseQuietHours(isOn: unknown, range: unknown): QuietHours {
   if (isOn === false) return { kind: 'off' }
   if (isOn !== undefined && isOn !== true) return { kind: 'invalid', setting: 'switch', text: String(isOn) }
-  return parseRange(range ?? DEFAULT_RANGE)
+  return parseRange(range === undefined ? DEFAULT_RANGE : range)
 }
 
 function parseRange(range: unknown): QuietHours {
