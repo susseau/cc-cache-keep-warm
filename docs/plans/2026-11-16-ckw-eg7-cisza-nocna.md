@@ -28,8 +28,8 @@ startuje w `session.ts` na pełnej minucie przez `$.clock.after`, potem `$.clock
 
 - `hooks/quiet-hours.ts` (nowy) — odczyt opcji ciszy do wartości: typ `QuietHours`,
   `parseQuietHours`; czysty; zależy od: brak
-- `hooks/ping/decide-ping.ts` — `isQuiet` i krok `'quiet'` w `decidePing`; zależy od:
-  `hooks/quiet-hours.ts`
+- `hooks/ping/decide-ping.ts` — `isQuiet`, `fullMinuteFrom` i krok `'quiet'` w `decidePing`;
+  zależy od: `hooks/quiet-hours.ts`
 - `hooks/ping/schedule.ts` — `case 'quiet'` w `keepWarm`; traci `TICK_MS`; zależy od:
   `hooks/ping/decide-ping.ts`
 - `hooks/ping/ping.ts` — ponowienie po 60 s; zależy od: brak
@@ -92,7 +92,8 @@ keep-warm zostaje włączony, a po requeście o 08:10 ping wychodzi o 09:02.
     `QuietInvalid = { kind: 'invalid', setting: 'switch' | 'range', text: string }`
     (`setting`: która opcja jest błędna);
   - `parseQuietHours(isOn: unknown, range: unknown): QuietHours`.
-- Produkuje (`hooks/ping/decide-ping.ts`): `isQuiet(ms: number, quiet: QuietHours): boolean`.
+- Produkuje (`hooks/ping/decide-ping.ts`): `isQuiet(ms: number, quiet: QuietHours): boolean`,
+  `fullMinuteFrom(ms: number): number` (pełna minuta, o której wyjdzie ping należny w `ms`).
 - Produkuje też: `PingCheck.quiet: QuietHours`, `PingStep` z `'quiet'`,
   `SessionSnapshot.quiet: QuietHours`, `live.quiet: QuietHours`.
 
@@ -177,6 +178,8 @@ test('decidePing: no ping in the quiet hours unless a stop time was given', asyn
   expect(decidePing(check({ ...evening, pingsInRow: 6 }))).toEqual('quiet')
   expect(decidePing(check({ ...evening, stopAt: at(23) }))).toEqual('ping')
   expect(decidePing(check({ ...evening, stopAt: at(21) }))).toEqual('stop-at-time')
+  // 21:29:40, the first check after a start: the minute the line names, 21:30, is quiet.
+  expect(decidePing(check({ lastRequestAt: at(20, 37) + 30_000, now: at(21, 29) + 40_000 }))).toEqual('quiet')
   expect(decidePing(check({ lastRequestAt: at(21), now: at(21, 30) }))).toEqual('none')
   expect(decidePing(check({ quiet: { kind: 'invalid', setting: 'range', text: 'nights' } }))).toEqual('quiet')
 })
@@ -263,7 +266,8 @@ W `hooks/ping/decide-ping.ts`:
 import type { QuietHours } from '../quiet-hours'
 ```
 
-po imporcie `cache-timing` dodaj stałą, a za `isInPingWindow` predykat:
+do importu z `../cache-timing` dopisz `MINUTE_MS`, po importach dodaj stałą, a za
+`isInPingWindow` dwie funkcje:
 
 ```ts
 const HOUR_MIN = 60
@@ -280,6 +284,12 @@ export function isQuiet(ms: number, quiet: QuietHours) {
   const { startMin, endMin } = quiet
   return startMin < endMin ? minute >= startMin && minute < endMin : minute >= startMin || minute < endMin
 }
+
+// The tick runs on the full minute: a ping due at this moment goes out at this full minute or the
+// first one after it. The quiet check and the line both look at that minute, so they agree.
+export function fullMinuteFrom(ms: number) {
+  return Math.ceil(ms / MINUTE_MS) * MINUTE_MS
+}
 ```
 
 do `PingCheck` dopisz pole `quiet: QuietHours` (po `nearlyFull`), typ kroku i decyzję zmień na:
@@ -293,7 +303,7 @@ export type PingStep = 'none' | 'stop-at-time' | 'stop-after-max' | 'quiet' | 'p
 export function decidePing(check: PingCheck): PingStep {
   if (check.stopAt > 0 && check.now >= check.stopAt) return 'stop-at-time'
   if (!isInPingWindow(check) || check.now < check.pendingUntil) return 'none'
-  if (check.stopAt === 0 && isQuiet(check.now, check.quiet)) return 'quiet'
+  if (check.stopAt === 0 && isQuiet(fullMinuteFrom(check.now), check.quiet)) return 'quiet'
   if (check.stopAt === 0 && check.pingsInRow >= check.maxPings) return 'stop-after-max'
   if (!check.needsVisible) return 'ping'
   return check.nearlyFull ? 'blocked' : 'visible-ping'
@@ -417,8 +427,9 @@ ciszy.
 
 **Interfejsy:**
 
-- Konsumuje: typy `QuietHours`, `QuietInvalid` z `hooks/quiet-hours.ts`; `isQuiet` z
-  `hooks/ping/decide-ping.ts`; `SessionSnapshot.quiet`; `live.quiet` z `hooks/state.ts` (Task 1).
+- Konsumuje: typy `QuietHours`, `QuietInvalid` z `hooks/quiet-hours.ts`; `isQuiet`,
+  `fullMinuteFrom` z `hooks/ping/decide-ping.ts`; `SessionSnapshot.quiet`;
+  `live.quiet` z `hooks/state.ts` (Task 1).
 - Produkuje: `clockOfDay(minuteOfDay: number): string` w `hooks/format.ts` (`"08:00"`);
   `quietNotUnderstood(quiet: QuietInvalid): string` w `hooks/command.ts`; zmienia teksty
   `lineModel(...).details` i `statusText(session, maxPings)`.
@@ -472,7 +483,7 @@ test('statusText: the quiet hours while keep-warm is on', async () => {
   expect(lines(QUIET)[1]).toEqual('Quiet hours 21:30–08:00: no pings then (a stop time overrides them).')
   expect(lines({ kind: 'off' })[1]).toEqual('Quiet hours: off.')
   expect(lines({ kind: 'invalid', setting: 'range', text: 'nights' })[1]).toEqual('Quiet hours range "nights" not understood (use HH:MM-HH:MM); keep-warm will not ping until it is fixed.')
-  expect(lines({ kind: 'invalid', setting: 'switch', text: 'yes' })[1]).toEqual('Quiet hours setting "yes" not understood (use on or off); keep-warm will not ping until it is fixed.')
+  expect(lines({ kind: 'invalid', setting: 'switch', text: 'yes' })[1]).toEqual('Quiet hours setting "yes" not understood (use true or false); keep-warm will not ping until it is fixed.')
   expect(statusText(snapshot({}), 6)).not.toContain('Quiet hours')
 })
 ```
@@ -540,7 +551,7 @@ kolejne:
 
 ```ts
 import { cacheLength, clockOfDay, clockTime, minutes, timeLeft, tokens } from '../format'
-import { isQuiet } from '../ping/decide-ping'
+import { fullMinuteFrom, isQuiet } from '../ping/decide-ping'
 import type { QuietHours } from '../quiet-hours'
 ```
 
@@ -559,9 +570,10 @@ W `lineModel` zmień linię `isKeepingWarm` na:
 Po `isBlocked` dodaj:
 
 ```ts
-// The tick runs on the full minute, so the ping goes out at the first one in its window.
-function nextPingAt({ lastRequestAt }: SessionSnapshot, { ttlMs }: Countdown) {
-  return Math.ceil((lastRequestAt + ttlMs - PING_LEAD_MS) / MINUTE_MS) * MINUTE_MS
+// The full minute the next ping goes out at: the first in its window, or the next one when the
+// window is already open; `decidePing` checks the quiet hours at the same minute.
+function nextPingAt({ lastRequestAt, now }: SessionSnapshot, { ttlMs }: Countdown) {
+  return fullMinuteFrom(Math.max(lastRequestAt + ttlMs - PING_LEAD_MS, now))
 }
 
 // The next ping would fall in the quiet hours and no stop time overrides them: none goes out.
@@ -614,7 +626,7 @@ function quietLine(quiet: QuietHours) {
 // Names the option to fix and the form it takes; the status and the start notice say it.
 export function quietNotUnderstood({ setting, text }: QuietInvalid) {
   const option = setting === 'switch' ? 'Quiet hours setting' : 'Quiet hours range'
-  const form = setting === 'switch' ? 'on or off' : 'HH:MM-HH:MM'
+  const form = setting === 'switch' ? 'true or false' : 'HH:MM-HH:MM'
   return `${option} "${text}" not understood (use ${form}); keep-warm will not ping until it is fixed.`
 }
 ```
@@ -631,7 +643,7 @@ W `README.md` w tabeli linii po wierszu `**󰁔 ping 14:07**` dopisz:
 
 ```markdown
 | **󰁔 no ping: quiet hours to 08:00** | The next ping would fall in your quiet hours, so keep-warm sends none: the bar turns mustard and the line shows when the cache expires. After your next message keep-warm carries on. A stop time overrides the quiet hours. |
-| **quiet hours setting not understood** | Keep-warm cannot read the **Quiet hours** or **Quiet hours range** setting, so it sends no ping until you fix it (on or off; `HH:MM-HH:MM`, for example `21:30-08:00`). A notice and `/keepwarm status` name the setting. |
+| **quiet hours setting not understood** | Keep-warm cannot read the **Quiet hours** or **Quiet hours range** setting, so it sends no ping until you fix it (`true` or `false`; `HH:MM-HH:MM`, for example `21:30-08:00`). A notice and `/keepwarm status` name the setting. |
 ```
 
 W `.claude/CLAUDE.md` punkt `format.ts` zmień na „- `format.ts`: minutes, clock time (also of a
