@@ -1,6 +1,8 @@
 // What the line above the prompt says, decided from the session's values alone.
 import { HOUR_MS, isLongEnoughToKeepWarm, MINUTE_MS, PING_LEAD_MS } from '../cache-timing'
-import { cacheLength, clockTime, minutes, timeLeft, tokens } from '../format'
+import { cacheLength, clockOfDay, clockTime, minutes, timeLeft, tokens } from '../format'
+import { isQuiet } from '../ping/decide-ping'
+import type { QuietHours } from '../quiet-hours'
 import { netSaving } from '../savings'
 import { needsVisiblePing, type SessionSnapshot } from '../session-snapshot'
 import { filledCells } from './bar-model'
@@ -14,6 +16,7 @@ const EXPIRING_MS = 10 * MINUTE_MS
 const WAITS_TEXT = 'keep-warm starts after your next message'
 const SHOWS_IN_CHAT = ' (shows in chat)'
 const NEARLY_FULL_TEXT = 'conversation nearly full: keep-warm waits for you'
+const QUIET_NOT_UNDERSTOOD_TEXT = 'quiet hours setting not understood'
 
 // keeping: keep-warm is on and able to ping; stalled: it is on but cannot ping (paused, failed,
 // waiting for room); off: it is off.
@@ -38,7 +41,7 @@ export function lineModel(session: SessionSnapshot): LineModel {
   const { lastRequestAt, ttl, isOn } = session
   const countdown = countdownOf(session)
   const canKeepWarm = isLongEnoughToKeepWarm(ttl)
-  const isKeepingWarm = isOn && canKeepWarm && !session.pingError && !isBlocked(session)
+  const isKeepingWarm = isOn && canKeepWarm && !session.pingError && !isBlocked(session) && !isHeldByQuiet(session, countdown)
   return {
     filledCells: filledCells(countdown),
     tone: isKeepingWarm ? 'keeping' : isOn ? 'stalled' : 'off',
@@ -59,6 +62,20 @@ function countdownOf({ now, lastRequestAt, ttl }: SessionSnapshot): Countdown {
 // The next ping has to be the visible one but the conversation is too full for it.
 function isBlocked(session: SessionSnapshot) {
   return needsVisiblePing(session) && session.nearlyFull
+}
+
+// When the next ping is due; `decidePing` checks the quiet hours at the check that sends it.
+function nextPingAt({ lastRequestAt }: SessionSnapshot, { ttlMs }: Countdown) {
+  return lastRequestAt + ttlMs - PING_LEAD_MS
+}
+
+// The next ping would fall in the quiet hours and no stop time overrides them: none goes out.
+function isHeldByQuiet(session: SessionSnapshot, countdown: Countdown) {
+  return session.stopAt === 0 && countdown.isWarm && isQuiet(nextPingAt(session, countdown), session.quiet)
+}
+
+function quietDetail(quiet: QuietHours) {
+  return quiet.kind === 'on' ? `${NEXT_ICON} no ping: quiet hours to ${clockOfDay(quiet.endMin)}` : QUIET_NOT_UNDERSTOOD_TEXT
 }
 
 // While keep-warm holds the cache the next ping matters, not the expiry; near the end the
@@ -89,13 +106,13 @@ function keepWarmDetails(session: SessionSnapshot, countdown: Countdown): string
 
 // With the cache length unknown no ping can go out; before the conversation has answered in
 // this run the next one is the visible ping.
-function nextPingDetails(session: SessionSnapshot, { isWarm, ttlMs }: Countdown) {
+function nextPingDetails(session: SessionSnapshot, countdown: Countdown) {
   if (session.pingError) return [`ping failed: ${session.pingError}`]
   if (!session.ttl) return [WAITS_TEXT]
   if (isBlocked(session)) return [NEARLY_FULL_TEXT]
-  if (!isWarm) return []
-  const nextPingAt = clockTime(session.lastRequestAt + ttlMs - PING_LEAD_MS)
-  return [`${NEXT_ICON} ping ${nextPingAt}${needsVisiblePing(session) ? SHOWS_IN_CHAT : ''}`]
+  if (!countdown.isWarm) return []
+  if (isHeldByQuiet(session, countdown)) return [quietDetail(session.quiet)]
+  return [`${NEXT_ICON} ping ${clockTime(nextPingAt(session, countdown))}${needsVisiblePing(session) ? SHOWS_IN_CHAT : ''}`]
 }
 
 function pingCountDetails({ pings }: SessionSnapshot) {

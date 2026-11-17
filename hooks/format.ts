@@ -9,6 +9,12 @@ export function clockTime(ms: number) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+// A time of day given as minutes since midnight, as the quiet hours keep it.
+export function clockOfDay(minuteOfDay: number) {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(Math.floor(minuteOfDay / 60))}:${pad(minuteOfDay % 60)}`
+}
+
 export function tokens(n: number) {
   return n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : `${Math.round(n / 1000)}k`
 }

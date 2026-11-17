@@ -5,6 +5,7 @@ import { MINUTE_MS } from '../cache-timing'
 import { COMMAND } from '../command'
 import { switchOnIfNew } from '../keep-warm-switch'
 import { tick, TICK_MS } from '../ping/schedule'
+import { noticeUnreadQuiet } from '../quiet-notice'
 import { forgetOldSessions, openSessionStore, restoreSaved, saveIfRestored } from '../session-store'
 import { live, readSnapshot, writeSession } from '../state'
 import { syncTitle } from '../title'
@@ -21,6 +22,7 @@ export async function startSession($: EngineInterface) {
   live.isFirstRequest = true
   if (await restoreSaved($)) await switchOnIfNew($)
   await forgetOldSessions($, await $.clock.now())
+  noticeUnreadQuiet($)
 
   await tick($)
   $.clock.every(TICK_MS, () => void tick($))

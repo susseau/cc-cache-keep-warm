@@ -6,7 +6,7 @@ import { parseStop, statusText } from '../hooks/command'
 import { NO_SAVINGS } from '../hooks/savings'
 import { lineModel } from '../hooks/line/line-model'
 import { decidePing, isQuiet, isTooFullForVisiblePing, type PingCheck } from '../hooks/ping/decide-ping'
-import { parseQuietHours } from '../hooks/quiet-hours'
+import { parseQuietHours, type QuietHours } from '../hooks/quiet-hours'
 import type { SessionSnapshot } from '../hooks/session-snapshot'
 import { correctTtl, decideTtl, parseTtl, shortAfterGap, type TtlMemory, type TtlSources } from '../hooks/ttl/decide-ttl'
 import { MINUTE, READ, START, WRITE } from './engine'
@@ -187,4 +187,27 @@ test('lineModel: keeping while on and able to ping, stalled while on and not, of
   expect(lineModel(snapshot({})).tone).toEqual('off')
   expect(lineModel(snapshot({ isOn: true, sawResponse: false, nearlyFull: true })).details).toContain('conversation nearly full: keep-warm waits for you')
   expect(lineModel(snapshot({ ttl: API_TTL })).canToggle).toEqual(false)
+})
+
+test('lineModel: a ping that would fall in the quiet hours is named', async () => {
+  // 20:38: the ping would be due at 21:30, the start of the quiet hours.
+  const evening = at(20, 38)
+  const quiet = lineModel(snapshot({ isOn: true, lastRequestAt: evening, now: evening }))
+  expect(quiet.tone).toEqual('stalled')
+  expect(quiet.details).toEqual(['󰔟 expires 21:38', '󰁔 no ping: quiet hours to 08:00', '54k cached'])
+  const earlier = evening - MINUTE
+  expect(lineModel(snapshot({ isOn: true, lastRequestAt: earlier, now: earlier })).details).toEqual(['󰁔 ping 21:29', '54k cached'])
+  const stopped = lineModel(snapshot({ isOn: true, lastRequestAt: evening, now: evening, stopAt: at(23) }))
+  expect(stopped.details).toEqual(['keep-warm stops 23:00', '󰁔 ping 21:30', '54k cached'])
+  const unread = lineModel(snapshot({ isOn: true, quiet: { kind: 'invalid', setting: 'range', text: 'nights' } }))
+  expect(unread.details).toEqual(['󰔟 expires 11:00', 'quiet hours setting not understood', '54k cached'])
+})
+
+test('statusText: the quiet hours while keep-warm is on', async () => {
+  const lines = (quiet: QuietHours) => statusText(snapshot({ isOn: true, quiet }), 6).split('\n')
+  expect(lines(QUIET)[1]).toEqual('Quiet hours 21:30–08:00: no pings then (a stop time overrides them).')
+  expect(lines({ kind: 'off' })[1]).toEqual('Quiet hours: off.')
+  expect(lines({ kind: 'invalid', setting: 'range', text: 'nights' })[1]).toEqual('Quiet hours range "nights" not understood (use HH:MM-HH:MM); keep-warm will not ping until it is fixed.')
+  expect(lines({ kind: 'invalid', setting: 'switch', text: 'yes' })[1]).toEqual('Quiet hours setting "yes" not understood (use true or false); keep-warm will not ping until it is fixed.')
+  expect(statusText(snapshot({}), 6)).not.toContain('Quiet hours')
 })

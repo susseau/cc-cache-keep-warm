@@ -21,6 +21,7 @@ test('/keepwarm on: the line names the next ping', async ($, on) => {
   await clock.advance(MINUTE)
   expect(await keepwarm($, 'on')).toEqual([
     'Keep-warm on (stops itself after 8 pings in a row): about 8 min before the cache would expire, it re-reads the conversation from cache in the background. A cold cache is never pinged.',
+    'Quiet hours 21:30–08:00: no pings then (a stop time overrides them).',
     'This session\'s cache lasts 1-hour (subscription).',
   ].join('\n'))
   expect(await line($)).toEqual('󰁔 ping 10:52·54k cached·59 min left•••••• 󰓛 Stop ')
@@ -102,6 +103,30 @@ test('no ping in the quiet hours; keep-warm stays on and pings again after a mor
   await answer($, engine, WRITE)
   await clock.advance(52 * MINUTE)
   expect(engine.forks).toEqual(1)
+})
+
+test('quiet hours: the line says so before the ping would fall in them', async ($, on) => {
+  const { engine, clock } = stubEngine(on)
+  // 20:45, before the session starts: no check runs yet.
+  await clock.advance(10 * 60 * MINUTE + 45 * MINUTE)
+  await start($)
+  await answer($, engine, WRITE)
+  await keepwarm($, 'on')
+  expect(await line($)).toEqual('󰔟 expires 21:45·󰁔 no ping: quiet hours to 08:00·54k cached·60 min left•••••• 󰓛 Stop ')
+  await clock.advance(60 * MINUTE)
+  expect(engine.forks).toEqual(0)
+})
+
+test('quiet hours hold back the visible ping too', async ($, on) => {
+  const evening = START + 10 * 60 * MINUTE + 45 * MINUTE
+  const { engine, clock } = stubEngine(on, { store: { 'session:S1': { ...SAVED_ON, lastRequestAt: evening, savedAt: evening } } })
+  // 20:50, reopened after a relaunch: the next ping would be the visible one.
+  await clock.advance(10 * 60 * MINUTE + 50 * MINUTE)
+  await start($)
+  expect(await line($)).toContain('󰁔 no ping: quiet hours to 08:00')
+  await clock.advance(60 * MINUTE)
+  expect(engine.submitted).toEqual([])
+  expect(engine.forks).toEqual(0)
 })
 
 test('a return the pings kept warm: the line shows what keep-warm saved', async ($, on) => {

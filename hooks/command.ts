@@ -3,8 +3,9 @@ import type { EngineInterface } from 'claude-code'
 
 import type { KeepWarmSavings } from '../types'
 import { HOUR_MS, isTooShortToKeepWarm, KEEP_WARM_MIN_TTL_MS, MINUTE_MS, PING_LEAD_MS } from './cache-timing'
-import { cacheLength, clockTime, minutes, tokens } from './format'
+import { cacheLength, clockOfDay, clockTime, minutes, tokens } from './format'
 import { switchOff, switchOn } from './keep-warm-switch'
+import type { QuietHours, QuietInvalid } from './quiet-hours'
 import { netSaving } from './savings'
 import { needsVisiblePing, type SessionSnapshot } from './session-snapshot'
 import { live, readSnapshot } from './state'
@@ -53,6 +54,7 @@ export function statusText(session: SessionSnapshot, maxPings: number) {
       ? `Keep-warm on${stopAt ? ` until ${clockTime(stopAt)}` : ` (stops itself after ${maxPings} pings in a row)`}: about ${minutes(PING_LEAD_MS)} min before the cache would expire, it re-reads the conversation from cache in the background. A cold cache is never pinged.`
       : 'Keep-warm off: the cache expires normally.',
   ]
+  if (isOn) lines.push(quietLine(session.quiet))
   if (isOn && needsVisiblePing(session)) lines.push('Claude Code can repeat this conversation invisibly only once it has answered since the app started, so the next ping is a short message in the chat.')
   if (ttl) lines.push(`This session's cache lasts ${cacheLength(ttl.ms)} (${ttl.reason === 'observed' ? 'seen expiring sooner than expected' : ttl.reason}).`)
   if (isTooShortToKeepWarm(ttl)) lines.push(`Keep-warm only pings a cache of ${minutes(KEEP_WARM_MIN_TTL_MS)} min or longer.`)
@@ -61,6 +63,19 @@ export function statusText(session: SessionSnapshot, maxPings: number) {
     lines.push(`${clockTime(p.at)} · ${p.isHit ? `read ${tokens(p.read)} from cache` : 'found the cache cold'}`)
   }
   return lines.join('\n')
+}
+
+function quietLine(quiet: QuietHours) {
+  if (quiet.kind === 'off') return 'Quiet hours: off.'
+  if (quiet.kind === 'invalid') return quietNotUnderstood(quiet)
+  return `Quiet hours ${clockOfDay(quiet.startMin)}–${clockOfDay(quiet.endMin)}: no pings then (a stop time overrides them).`
+}
+
+// Names the option to fix and the form it takes; the status and the start notice say it.
+export function quietNotUnderstood({ setting, text }: QuietInvalid) {
+  const option = setting === 'switch' ? 'Quiet hours setting' : 'Quiet hours range'
+  const form = setting === 'switch' ? 'true or false' : 'HH:MM-HH:MM'
+  return `${option} "${text}" not understood (use ${form}); keep-warm will not ping until it is fixed.`
 }
 
 // The session's whole account: what the pings cost, what the returns they kept warm saved, the net.
