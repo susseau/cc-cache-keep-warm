@@ -25,6 +25,29 @@ startuje (`hooks/ping/ticking.ts`) na pełnej minucie przez `$.clock.after`, pot
   (`statusText`), nowe parsowanie zakresu.
 - `claude plugin validate --strict` (marketplace i plugin) przechodzi.
 
+## Odstępstwa
+
+- **Podział modułu ciszy** — spec: `hooks/quiet-hours.ts` ma `parseQuietHours`, `isQuiet`,
+  `formatQuietRange`, `formatQuietEnd` → plan: `quiet-hours.ts` ma tylko typy i
+  `parseQuietHours`; `isQuiet` jest w `hooks/ping/decide-ping.ts`, godzinę z minut daje
+  `clockOfDay` w `hooks/format.ts`, a zakres i koniec składają z niej `statusText` i linia.
+  Powód: jedna odpowiedzialność na plik (decyzja właściciela 2026-11-17). Constraint: brak.
+  Taski: 1, 2.
+- **Która opcja jest błędna** — spec: `QuietInvalid = { kind: 'invalid', text }` → plan:
+  `{ kind: 'invalid', setting: 'switch' | 'range', text }`; komunikat (`quietNotUnderstood` w
+  `hooks/command.ts`) nazywa błędną opcję i jej format (`true or false` albo `HH:MM-HH:MM`).
+  Powód: wskazówka formatu zakresu przy błędnym przełączniku prowadzi do złej opcji. Constraint:
+  brak. Taski: 1, 2.
+- **Cisza na minucie pingu** — spec: krok 3 `decidePing` sprawdza `isQuiet(now, quiet)` → plan:
+  `isQuiet(fullMinuteFrom(now), quiet)`, a linia sprawdza tę samą pełną minutę. Powód: pierwszy
+  tick po starcie (np. 21:29:40) nie może wysłać pingu, który linia zapowiada jako wstrzymany
+  ciszą od 21:30. Constraint: brak. Taski: 1, 2.
+- **Gdzie startują tick i toast** — spec: start ticku w `hooks/ping/schedule.ts` /
+  `hooks/events/session.ts`, toast o błędnej opcji przy starcie sesji → plan: start ticku w nowym
+  `hooks/ping/ticking.ts` (`startTicking`), toast w nowym `hooks/quiet-notice.ts`
+  (`noticeUnreadQuiet`); `session.ts` tylko je woła. Powód: jedna odpowiedzialność na plik
+  (decyzja właściciela 2026-11-17). Constraint: brak. Taski: 2, 3.
+
 ## File Structure
 
 - `hooks/quiet-hours.ts` (nowy) — odczyt opcji ciszy do wartości: typ `QuietHours`,
