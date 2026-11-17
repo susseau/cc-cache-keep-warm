@@ -75,7 +75,7 @@ function quietLine(quiet: QuietHours) {
 export function quietNotUnderstood({ setting, text }: QuietInvalid) {
   const option = setting === 'switch' ? 'Quiet hours setting' : 'Quiet hours range'
   const form = setting === 'switch' ? 'true or false' : 'HH:MM-HH:MM'
-  return `${option} "${text}" not understood (use ${form}); keep-warm will not ping until it is fixed.`
+  return `${option} "${text}" not understood (use ${form}); keep-warm will not ping without a stop time until it is fixed.`
 }
 
 // The session's whole account: what the pings cost, what the returns they kept warm saved, the net.
