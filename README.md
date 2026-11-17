@@ -42,7 +42,7 @@ Example: a long conversation of **500k tokens** on Claude Opus 5.5, at current A
 | --- | ---: |
 | Your next message after the cache expired (re-writes everything) | **≈ $4.00** |
 | One keep-warm ping (reads it from the cache) | ≈ $0.10 |
-| Keeping it warm through an 8-hour night (8 pings) | ≈ $0.80 |
+| Keeping it warm through a 5-hour break (6 pings) | ≈ $0.60 |
 
 On a subscription you do not pay per token, but the same proportions apply to your usage limits.
 
@@ -95,7 +95,7 @@ Click **󰐊 Warm** on the line, or type a command:
 | `/keepwarm off` | Stop (or click **󰓛 Stop**) |
 | `/keepwarm` | Show the state, the last pings and what keep-warm cost and saved in this session |
 
-Keep-warm is **off by default** and you switch it **per session**: only the sessions you want are kept warm. To have it on in every new session, turn on the **On in new sessions** setting. It stops by itself after about 7 hours (8 pings in a row, the **Pings in a row** setting) unless you gave it a time: each ping that finds the cache warm costs about a nineteenth of what one return to a warm cache saves (one that finds it cold re-writes it and can cost more than a return saves), and the longer the break, the less likely it ends soon.
+Keep-warm is **off by default** and you switch it **per session**: only the sessions you want are kept warm. To have it on in every new session, turn on the **On in new sessions** setting. It stops by itself after about 5 hours (6 pings in a row, the **Pings in a row** setting) unless you gave it a time: each ping that finds the cache warm costs about a nineteenth of what one return to a warm cache saves (one that finds it cold re-writes it and can cost more than a return saves), and the longer the break, the less likely it ends soon.
 
 ### Reading the line
 
@@ -107,6 +107,8 @@ The line sits on the right, above the prompt. Its icons come from a [Nerd Font](
 | **nothing cached yet** | A new conversation, or one you just cleared or compacted: nothing of it is cached until your next message, and the countdown starts with that. |
 | **󰔟 expires 14:12** | The clock time the cache expires if nothing happens. Not shown while keep-warm is holding the cache: the next ping matters then. |
 | **󰁔 ping 14:07** | When keep-warm will read the cache next. **(shows in chat)** means this ping is a short visible message, because the session hasn't answered since the app restarted. |
+| **󰁔 no ping: quiet hours to 08:00** | The next ping would fall in your quiet hours, so keep-warm sends none: the bar turns mustard and the line shows when the cache expires. After your next message keep-warm carries on. A stop time overrides the quiet hours. |
+| **quiet hours setting not understood** | Keep-warm cannot read the **Quiet hours** or **Quiet hours range** setting, so without a stop time it sends no ping until you fix it (`true` or `false`; `HH:MM-HH:MM`, for example `21:30-08:00`). A notice and `/keepwarm status` name the setting. |
 | **3 pings ✓** | Pings so far, and whether the last one found the cache warm (✓) or cold (✗). |
 | **󰆼 saved 90k** | What keep-warm has saved in this session so far, once it has pinged: each time you came back after a break longer than the cache and found it warm, it saved re-writing your conversation (a re-write costs 2x, a cache read 0.1x), minus what every ping cost. In input-token equivalents. **󰆼 cost 5k** while no return has paid the pings back yet. Shown while keep-warm is on. |
 | **conversation nearly full: keep-warm waits for you** | After a restart the next ping has to be the visible one, and Claude Code re-sends your project's instruction files (`CLAUDE.md`, the files it imports, `MEMORY.md`) with it. Here those would not fit next to the conversation: the ping would fail or make Claude Code compact the conversation. So keep-warm waits for your own next message. |
@@ -130,7 +132,7 @@ flowchart LR
 - **It never wakes a cold cache.** The ping goes out 8 minutes before the cache would expire. If the cache has already expired, keep-warm waits for your next message instead of paying to rebuild it.
 - **Nothing is added to your conversation.** The ping sends your conversation once more, outside the chat, with a one-line question, and throws the answer away. One exception: after the app restarts, Claude Code can repeat a conversation only once it has answered again. So in a session you haven't touched since the restart, the first ping is a short message in the chat, which Claude answers with "ok". The line says so in advance: "󰁔 ping 14:07 (shows in chat)".
 - **It works while Claude is waiting for you**, for example on a question it asked you or a permission prompt.
-- **It is light.** The line itself never calls the model: one quick local check every 15 seconds, redrawn at most once a minute. The only thing that uses your plan or credits is the ping, about once every 52 minutes, in sessions where keep-warm is on.
+- **It is light.** The line itself never calls the model: one quick local check a minute, redrawn at most once a minute. The only thing that uses your plan or credits is the ping, about once every 52 minutes, in sessions where keep-warm is on.
 
 <details>
 <summary><b>How it knows how long your cache lasts</b></summary>
@@ -156,7 +158,9 @@ Keep-warm only pings a cache that lasts **30 minutes or more**: on the five-minu
 | --- | --- | --- |
 | Mark the session title | On | While keep-warm is on, put 🟢 in front of the session's title in the desktop app's session list |
 | On in new sessions | Off | Turn keep-warm on in every new session, as if you ran `/keepwarm on`. A session you reopen keeps its own switch, so one you switched off stays off |
-| Pings in a row | 8 | Without a stop time, keep-warm stops itself after this many pings in a row, one about every 52 minutes (1 to 20; 8 is about 7 hours). Any real turn in the conversation starts the count over |
+| Pings in a row | 6 | Without a stop time, keep-warm stops itself after this many pings in a row, one about every 52 minutes (1 to 20; 6 is about 5 hours). Any real turn in the conversation starts the count over |
+| Quiet hours | On | Without a stop time, keep-warm sends no ping in the quiet hours: the cache expires, and after your next message keep-warm carries on. A stop time (`/keepwarm 3h`, `/keepwarm until 23:30`) overrides them |
+| Quiet hours range | 21:30-08:00 | The quiet hours in your local time, `HH:MM-HH:MM`; they may run past midnight. A value keep-warm cannot read means no pings without a stop time until you fix it |
 
 Change them in `/config`, or with `/plugin configure cache-keep-warm@cache-keep-warm`.
 
@@ -173,7 +177,7 @@ In the desktop app, renaming a title **you typed yourself** asks for your approv
 Your cache lasts five minutes by default, so keep-warm does not ping. If you take longer breaks, set `promptCacheTtl` to `"1h"` in your Claude Code settings: the cache then lasts an hour and keep-warm works. One-hour cache writes cost more than five-minute ones, so this pays off only if you do take breaks.
 
 **Will it ping forever if I forget it?**
-No. It stops by itself after 8 pings in a row (about 7 hours; the **Pings in a row** setting goes up to 20), or at the time you gave it with `/keepwarm 3h` or `/keepwarm until 18:00`.
+No. It stops by itself after 6 pings in a row (about 5 hours; the **Pings in a row** setting goes up to 20), or at the time you gave it with `/keepwarm 3h` or `/keepwarm until 18:00`. It also sends no ping in the quiet hours (21:30–08:00 by default) unless you gave it a stop time.
 
 **Does it work in VS Code?**
 The keep-warm pings work there, but the line is only drawn in the terminal and in the desktop app's Code tab.
@@ -218,9 +222,10 @@ With the setting **Mark the session title** off, the mod never adds the mark; it
 - **Your Claude Code settings**, for `promptCacheTtl` only, and three environment variables: `FORCE_PROMPT_CACHING_5M`, `CLAUDE_CODE_PROMPT_CACHE_TTL` and `ENABLE_PROMPT_CACHING_1H`, to know how long your cache lasts. The mod asks Claude Code for that one setting by name, so it never receives your other settings, credentials or API keys.
 - **This session's figures** from Claude Code: the conversation's size, the cache, input and output tokens of each request (to count what keep-warm cost and saved), and whether your plan's usage limits are reported (which tells a subscription from an API key). After a restart, while the next ping would be the visible one, also the free space left in the context window and the size of the instruction files (their token counts only, never their text), to check the visible ping fits.
 - **When you reopen a session**, what Claude Code tells mods at that moment: how long ago the session's last answer came and how big the conversation is. That lets the countdown carry on before your first message.
-- **The clock.**
+- **Its own settings**: the ones in the table above, quiet hours included.
+- **The clock**, and its local time of day for the quiet hours.
 
-It checks these every 15 seconds, on your computer, and sends none of them anywhere. It does not read your files.
+It checks these once a minute, on your computer, and sends none of them anywhere. It does not read your files.
 
 ### What it keeps
 
@@ -230,7 +235,7 @@ Per session, in Claude Code's plugin storage on your computer: the time of the l
 
 | Event | What the mod does with it |
 | --- | --- |
-| Session start | Adds the `/keepwarm` command and starts its 15-second local check |
+| Session start | Adds the `/keepwarm` command and starts its once-a-minute local check |
 | A session is reopened or cleared (Claude Code's `SessionStart` hook) | Reads how long ago the last answer came and the conversation's size, so the countdown carries on; after `/clear`, starts the countdown over. Changes nothing. |
 | A compaction (`/compact` or automatic) | Checks only whose it is and whether it went through: when your conversation itself was compacted, starts the countdown over. Ignores a subagent's compaction of its own work and a summary prepared ahead of time. Never reads or changes the summary or your messages. |
 | Each request of the main conversation | Notes the time and how much was read from the cache. Changes nothing. Subagents' requests are ignored. |

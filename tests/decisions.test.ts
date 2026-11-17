@@ -5,12 +5,17 @@ import { DEFAULT_MAX_PINGS, pingLimit } from '../hooks/cache-timing'
 import { parseStop, statusText } from '../hooks/command'
 import { NO_SAVINGS } from '../hooks/savings'
 import { lineModel } from '../hooks/line/line-model'
-import { decidePing, isTooFullForVisiblePing, type PingCheck } from '../hooks/ping/decide-ping'
+import { decidePing, isQuiet, isTooFullForVisiblePing, type PingCheck } from '../hooks/ping/decide-ping'
+import { parseQuietHours, type QuietHours } from '../hooks/quiet-hours'
 import type { SessionSnapshot } from '../hooks/session-snapshot'
 import { correctTtl, decideTtl, parseTtl, shortAfterGap, type TtlMemory, type TtlSources } from '../hooks/ttl/decide-ttl'
 import { MINUTE, READ, START, WRITE } from './engine'
 
 const HOUR = 60 * MINUTE
+// The quiet hours the kit runs with (it cannot pass options): 21:30–08:00.
+const QUIET = parseQuietHours(undefined, undefined)
+// A clock time on the stub's day, in local time like the quiet hours.
+const at = (hours: number, mins = 0) => new Date(2026, 10, 13, hours, mins).getTime()
 const SUBSCRIPTION_TTL = { ms: HOUR, reason: 'subscription' } as const
 const API_TTL = { ms: 5 * MINUTE, reason: 'api' } as const
 
@@ -62,7 +67,7 @@ test('shortAfterGap: only a re-write after a gap the cache should have outlived 
 })
 
 const check = (fields: Partial<PingCheck> = {}): PingCheck => ({
-  now: START + 52 * MINUTE, ttl: SUBSCRIPTION_TTL, lastRequestAt: START, stopAt: 0, pendingUntil: 0, pingsInRow: 0, maxPings: DEFAULT_MAX_PINGS, needsVisible: false, nearlyFull: false, ...fields,
+  now: START + 52 * MINUTE, ttl: SUBSCRIPTION_TTL, lastRequestAt: START, stopAt: 0, pendingUntil: 0, pingsInRow: 0, maxPings: DEFAULT_MAX_PINGS, needsVisible: false, nearlyFull: false, quiet: QUIET, ...fields,
 })
 
 test('decidePing: only between 52 and 59 min, never on a cold cache', async () => {
@@ -76,22 +81,72 @@ test('decidePing: only between 52 and 59 min, never on a cold cache', async () =
 
 test('decidePing: the stops, and the visible ping', async () => {
   expect(decidePing(check({ stopAt: START + 30 * MINUTE }))).toEqual('stop-at-time')
-  expect(decidePing(check({ pingsInRow: 7 }))).toEqual('ping')
-  expect(decidePing(check({ pingsInRow: 8 }))).toEqual('stop-after-max')
+  expect(decidePing(check({ pingsInRow: 5 }))).toEqual('ping')
+  expect(decidePing(check({ pingsInRow: 6 }))).toEqual('stop-after-max')
   expect(decidePing(check({ pingsInRow: 8, maxPings: 12 }))).toEqual('ping')
   expect(decidePing(check({ pingsInRow: 8, stopAt: START + 3 * HOUR }))).toEqual('ping')
   expect(decidePing(check({ needsVisible: true }))).toEqual('visible-ping')
   expect(decidePing(check({ needsVisible: true, nearlyFull: true }))).toEqual('blocked')
 })
 
-test('pingLimit: the max_pings option brought into 1..20; not a number, 8', async () => {
-  expect(pingLimit(undefined)).toEqual(8)
+test('parseQuietHours: on by default, from 21:30 to 08:00', async () => {
+  expect(QUIET).toEqual({ kind: 'on', startMin: 21 * 60 + 30, endMin: 8 * 60 })
+})
+
+test('parseQuietHours: switched off, the range is not read', async () => {
+  expect(parseQuietHours(false, 'nights')).toEqual({ kind: 'off' })
+})
+
+test('parseQuietHours: a range to the minute, one-digit hours and spaces allowed', async () => {
+  expect(parseQuietHours(true, '22:00-7:30')).toEqual({ kind: 'on', startMin: 22 * 60, endMin: 7 * 60 + 30 })
+  expect(parseQuietHours(undefined, ' 1:05 - 6:45 ')).toEqual({ kind: 'on', startMin: 65, endMin: 6 * 60 + 45 })
+})
+
+test('parseQuietHours: a range it cannot read is an invalid range', async () => {
+  expect(parseQuietHours(true, '24:00-08:00')).toEqual({ kind: 'invalid', setting: 'range', text: '24:00-08:00' })
+  expect(parseQuietHours(true, '21:60-08:00')).toEqual({ kind: 'invalid', setting: 'range', text: '21:60-08:00' })
+  expect(parseQuietHours(true, '08:00-08:00')).toEqual({ kind: 'invalid', setting: 'range', text: '08:00-08:00' })
+  expect(parseQuietHours(true, 'nights')).toEqual({ kind: 'invalid', setting: 'range', text: 'nights' })
+  expect(parseQuietHours(true, 2130)).toEqual({ kind: 'invalid', setting: 'range', text: '2130' })
+  expect(parseQuietHours(true, null)).toEqual({ kind: 'invalid', setting: 'range', text: 'null' })
+})
+
+test('parseQuietHours: a switch that is neither true nor false is an invalid switch', async () => {
+  expect(parseQuietHours('yes', '21:30-08:00')).toEqual({ kind: 'invalid', setting: 'switch', text: 'yes' })
+})
+
+test('isQuiet: from the start, up to the end, across midnight or not; an unread setting is always quiet', async () => {
+  expect(isQuiet(at(21, 29), QUIET)).toEqual(false)
+  expect(isQuiet(at(21, 30), QUIET)).toEqual(true)
+  expect(isQuiet(at(3), QUIET)).toEqual(true)
+  expect(isQuiet(at(7, 59), QUIET)).toEqual(true)
+  expect(isQuiet(at(8), QUIET)).toEqual(false)
+  const lunch = parseQuietHours(true, '12:00-13:00')
+  expect(isQuiet(at(12, 30), lunch)).toEqual(true)
+  expect(isQuiet(at(13), lunch)).toEqual(false)
+  expect(isQuiet(at(3), lunch)).toEqual(false)
+  expect(isQuiet(at(3), { kind: 'off' })).toEqual(false)
+  expect(isQuiet(at(12), { kind: 'invalid', setting: 'range', text: 'nights' })).toEqual(true)
+})
+
+test('decidePing: no ping in the quiet hours unless a stop time was given', async () => {
+  const evening = { lastRequestAt: at(20, 38), now: at(21, 30) }
+  expect(decidePing(check(evening))).toEqual('quiet')
+  expect(decidePing(check({ ...evening, pingsInRow: 6 }))).toEqual('quiet')
+  expect(decidePing(check({ ...evening, stopAt: at(23) }))).toEqual('ping')
+  expect(decidePing(check({ ...evening, stopAt: at(21) }))).toEqual('stop-at-time')
+  expect(decidePing(check({ lastRequestAt: at(21), now: at(21, 30) }))).toEqual('none')
+  expect(decidePing(check({ quiet: { kind: 'invalid', setting: 'range', text: 'nights' } }))).toEqual('quiet')
+})
+
+test('pingLimit: the max_pings option brought into 1..20; not a number, 6', async () => {
+  expect(pingLimit(undefined)).toEqual(6)
   expect(pingLimit(12)).toEqual(12)
   expect(pingLimit(3.7)).toEqual(3)
   expect(pingLimit(50)).toEqual(20)
   expect(pingLimit(0)).toEqual(1)
-  expect(pingLimit(Number.NaN)).toEqual(8)
-  expect(pingLimit('12')).toEqual(8)
+  expect(pingLimit(Number.NaN)).toEqual(6)
+  expect(pingLimit('12')).toEqual(6)
 })
 
 test('isTooFullForVisiblePing: free room against the instruction files plus 30k', async () => {
@@ -114,14 +169,14 @@ test('parseStop: a duration, a clock time (tomorrow once past), or not understoo
 const snapshot = (fields: Partial<SessionSnapshot> = {}): SessionSnapshot => ({
   lastRequestAt: START, now: START, isOn: false, stopAt: 0, pings: [], ttl: SUBSCRIPTION_TTL, contextTokens: 54_000,
   isWaiting: false, shortAfterMs: 0, waitsForMessage: false, sawResponse: true, pingError: '', nearlyFull: false,
-  lastRealRequestAt: START, lastWarmPingAt: 0, savings: NO_SAVINGS, ...fields,
+  lastRealRequestAt: START, lastWarmPingAt: 0, savings: NO_SAVINGS, quiet: QUIET, ...fields,
 })
 
 test('statusText: on, its ping history and a short cache', async () => {
   const on = snapshot({ isOn: true, pings: [{ at: START, isHit: true, read: 54_000 }, { at: START + HOUR, isHit: false, read: 0 }] })
-  expect(statusText(on, 8).split('\n')[0]).toContain('(stops itself after 8 pings in a row)')
-  expect(statusText(on, 8).split('\n').slice(-2)).toEqual(['10:00 · read 54k from cache', '11:00 · found the cache cold'])
-  expect(statusText(snapshot({ ttl: API_TTL }), 8).split('\n')).toContain('Keep-warm only pings a cache of 30 min or longer.')
+  expect(statusText(on, 6).split('\n')[0]).toContain('(stops itself after 6 pings in a row)')
+  expect(statusText(on, 6).split('\n').slice(-2)).toEqual(['10:00 · read 54k from cache', '11:00 · found the cache cold'])
+  expect(statusText(snapshot({ ttl: API_TTL }), 6).split('\n')).toContain('Keep-warm only pings a cache of 30 min or longer.')
 })
 
 test('lineModel: keeping while on and able to ping, stalled while on and not, off while off', async () => {
@@ -133,4 +188,35 @@ test('lineModel: keeping while on and able to ping, stalled while on and not, of
   expect(lineModel(snapshot({})).tone).toEqual('off')
   expect(lineModel(snapshot({ isOn: true, sawResponse: false, nearlyFull: true })).details).toContain('conversation nearly full: keep-warm waits for you')
   expect(lineModel(snapshot({ ttl: API_TTL })).canToggle).toEqual(false)
+})
+
+test('lineModel: a ping that would fall in the quiet hours is named', async () => {
+  // 20:38: the ping would be due at 21:30, the start of the quiet hours.
+  const evening = at(20, 38)
+  const quiet = lineModel(snapshot({ isOn: true, lastRequestAt: evening, now: evening }))
+  expect(quiet.tone).toEqual('stalled')
+  expect(quiet.details).toEqual(['󰔟 expires 21:38', '󰁔 no ping: quiet hours to 08:00', '54k cached'])
+  const earlier = evening - MINUTE
+  expect(lineModel(snapshot({ isOn: true, lastRequestAt: earlier, now: earlier })).details).toEqual(['󰁔 ping 21:29', '54k cached'])
+  const stopped = lineModel(snapshot({ isOn: true, lastRequestAt: evening, now: evening, stopAt: at(23) }))
+  expect(stopped.details).toEqual(['keep-warm stops 23:00', '󰁔 ping 21:30', '54k cached'])
+  const unread = lineModel(snapshot({ isOn: true, quiet: { kind: 'invalid', setting: 'range', text: 'nights' } }))
+  expect(unread.details).toEqual(['󰔟 expires 11:00', 'quiet hours setting not understood', '54k cached'])
+})
+
+test('lineModel: the ping time is the full minute the check sends it at', async () => {
+  // 20:37:30: due at 21:29:30, sent by the check at 21:30, the start of the quiet hours.
+  const evening = at(20, 37) + 30_000
+  expect(lineModel(snapshot({ isOn: true, lastRequestAt: evening, now: evening })).details).toEqual(['󰔟 expires 21:37', '󰁔 no ping: quiet hours to 08:00', '54k cached'])
+  // 21:29:40, the window already open: the next check is at 21:30.
+  expect(lineModel(snapshot({ isOn: true, quiet: { kind: 'off' }, lastRequestAt: at(20, 37), now: at(21, 29) + 40_000 })).details).toContain('󰁔 ping 21:30')
+})
+
+test('statusText: the quiet hours while keep-warm is on', async () => {
+  const lines = (quiet: QuietHours) => statusText(snapshot({ isOn: true, quiet }), 6).split('\n')
+  expect(lines(QUIET)[1]).toEqual('Quiet hours 21:30–08:00: no pings then (a stop time overrides them).')
+  expect(lines({ kind: 'off' })[1]).toEqual('Quiet hours: off.')
+  expect(lines({ kind: 'invalid', setting: 'range', text: 'nights' })[1]).toEqual('Quiet hours range "nights" not understood (use HH:MM-HH:MM); keep-warm will not ping without a stop time until it is fixed.')
+  expect(lines({ kind: 'invalid', setting: 'switch', text: 'yes' })[1]).toEqual('Quiet hours setting "yes" not understood (use true or false); keep-warm will not ping without a stop time until it is fixed.')
+  expect(statusText(snapshot({}), 6)).not.toContain('Quiet hours')
 })

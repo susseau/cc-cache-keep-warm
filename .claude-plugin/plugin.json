@@ -39,10 +39,22 @@
     "max_pings": {
       "type": "number",
       "title": "Pings in a row",
-      "description": "Without a stop time, keep-warm stops itself after this many pings in a row, one about every 52 minutes (1 to 20; 8 is about 7 hours). Any real turn in the conversation starts the count over",
-      "default": 8,
+      "description": "Without a stop time, keep-warm stops itself after this many pings in a row, one about every 52 minutes (1 to 20; 6 is about 5 hours). Any real turn in the conversation starts the count over",
+      "default": 6,
       "min": 1,
       "max": 20
+    },
+    "quiet_hours": {
+      "type": "boolean",
+      "title": "Quiet hours",
+      "description": "Without a stop time, keep-warm sends no ping in the quiet hours: the cache expires, and after your next message keep-warm carries on",
+      "default": true
+    },
+    "quiet_range": {
+      "type": "string",
+      "title": "Quiet hours range",
+      "description": "The quiet hours in your local time, HH:MM-HH:MM; they may run past midnight",
+      "default": "21:30-08:00"
     }
   }
 }

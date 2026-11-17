@@ -10,18 +10,22 @@ import { finishTurn } from './events/turn'
 import { switchOff, switchOn } from './keep-warm-switch'
 import { lineModel } from './line/line-model'
 import { drawLine } from './line/line-view'
+import { parseQuietHours } from './quiet-hours'
 import { live, readSnapshot, writeSession } from './state'
 
-// The userConfig keys in plugin.json: the title mark, keep-warm on in every new session, and how
-// many pings in a row before keep-warm stops itself.
+// The userConfig keys in plugin.json: the title mark, keep-warm on in every new session, how many
+// pings in a row before keep-warm stops itself, and the quiet hours (a switch and a range).
 const TITLE_MARK_OPTION = 'title_mark'
 const DEFAULT_ON_OPTION = 'default_on'
 const MAX_PINGS_OPTION = 'max_pings'
+const QUIET_HOURS_OPTION = 'quiet_hours'
+const QUIET_RANGE_OPTION = 'quiet_range'
 
 export const register: Register = (on, options) => {
   live.titleMark = options[TITLE_MARK_OPTION] !== false
   live.defaultOn = options[DEFAULT_ON_OPTION] === true
   live.maxPings = pingLimit(options[MAX_PINGS_OPTION])
+  live.quiet = parseQuietHours(options[QUIET_HOURS_OPTION], options[QUIET_RANGE_OPTION])
 
   on('session.start', async ($, e, next) => {
     await startSession($)

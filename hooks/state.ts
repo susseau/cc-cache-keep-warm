@@ -2,6 +2,7 @@ import type { EngineInterface, ModelUsage } from 'claude-code'
 
 import type { KeepWarmPing, KeepWarmTtl } from '../types'
 import { DEFAULT_MAX_PINGS, isCacheHit, MAX_PINGS_CAP } from './cache-timing'
+import { parseQuietHours, type QuietHours } from './quiet-hours'
 import { NO_SAVINGS } from './savings'
 import type { SessionSnapshot } from './session-snapshot'
 
@@ -28,8 +29,8 @@ const SAVINGS = { plugin: 'cache-keep-warm', key: 'savings' } as const
 
 // The module's own variables start over on a reload; what must survive one is in $.state.
 // `titleMark` is the user's "Mark the session title" setting; changing it in /config reloads
-// the module, so it is read once in register(), like `defaultOn` ("On in new sessions") and
-// `maxPings` ("Pings in a row").
+// the module, so it is read once in register(), like `defaultOn` ("On in new sessions"),
+// `maxPings` ("Pings in a row") and `quiet` (the quiet hours).
 // `isUnseen`: the store had nothing for this session at start; `startedNew`: Claude Code started
 // it as a new session (not reopened). `planTtl` mirrors the shared plan-ttl store entry;
 // `savedTtl` is the length this session's own cache had when the store last saw it.
@@ -45,6 +46,7 @@ export const live: {
   titleMark: boolean
   defaultOn: boolean
   maxPings: number
+  quiet: QuietHours
   isUnseen: boolean
   startedNew: boolean
   planTtl: KeepWarmTtl | undefined
@@ -61,6 +63,7 @@ export const live: {
   titleMark: true,
   defaultOn: false,
   maxPings: DEFAULT_MAX_PINGS,
+  quiet: parseQuietHours(undefined, undefined),
   isUnseen: false,
   startedNew: false,
   planTtl: undefined,
@@ -95,6 +98,7 @@ export async function readSnapshot($: EngineInterface): Promise<SessionSnapshot>
     lastRealRequestAt: lastReal.value ?? 0,
     lastWarmPingAt: lastWarmPing.value ?? 0,
     savings: savings.value ?? NO_SAVINGS,
+    quiet: live.quiet,
   }
 }
 

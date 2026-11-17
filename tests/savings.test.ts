@@ -3,6 +3,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { statusText } from '../hooks/command'
 import { lineModel } from '../hooks/line/line-model'
+import { parseQuietHours } from '../hooks/quiet-hours'
 import { addPing, addSavedReturn, isSavedReturn, NO_SAVINGS, requestCost } from '../hooks/savings'
 import type { SessionSnapshot } from '../hooks/session-snapshot'
 import { MINUTE, READ, START, WRITE } from './engine'
@@ -15,7 +16,7 @@ const NOT_PAID_BACK = { pings: 1, pingCost: 5_035, returns: 0, saved: 0 }
 const snapshot = (fields: Partial<SessionSnapshot> = {}): SessionSnapshot => ({
   lastRequestAt: START, now: START, isOn: false, stopAt: 0, pings: [], ttl: SUBSCRIPTION_TTL, contextTokens: 54_000,
   isWaiting: false, shortAfterMs: 0, waitsForMessage: false, sawResponse: true, pingError: '', nearlyFull: false,
-  lastRealRequestAt: START, lastWarmPingAt: 0, savings: NO_SAVINGS, ...fields,
+  lastRealRequestAt: START, lastWarmPingAt: 0, savings: NO_SAVINGS, quiet: parseQuietHours(undefined, undefined), ...fields,
 })
 
 test('requestCost: input 1, cache read 0.1, 1-hour write 2, output 5', async () => {

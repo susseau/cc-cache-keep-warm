@@ -12,8 +12,8 @@ const PING_TEXT = 'Keep-warm ping. Reply with just "ok".'
 // this run. Until then the ping is a real message instead: it shows in the chat, Claude answers
 // "ok", and from then on the pings are invisible again. Same window, so never on a cold cache.
 const VISIBLE_PING_TEXT = 'Keep-warm ping from the Cache Keep-Warm mod. Reply with exactly "ok" and nothing else. Use no tools.'
-// After a failed ping, wait this long before trying again inside the window.
-const PING_RETRY_MS = 30_000
+// After a failed ping, try again at the next check inside the window.
+const PING_RETRY_MS = 60_000
 
 // The ping re-sends the main thread's last request outside the conversation with one short
 // question after it: it reads the conversation from cache (restarting its life), adds no
