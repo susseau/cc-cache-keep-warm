@@ -13,7 +13,7 @@ startuje (`hooks/ping/ticking.ts`) na pełnej minucie przez `$.clock.after`, pot
 **Stack:** TypeScript, mod Claude Code 2.1.325 (`$.clock`, `$.ui.toast`, `userConfig`), kit
 `claude plugin test`.
 
-**Spec:** `docs/specs/2026-11-16-ckw-eg7-cisza-nocna.md`
+**Spec:** `docs/archive/specs/2026-11-16-ckw-eg7-cisza-nocna.md`
 
 ## Global constraints
 
