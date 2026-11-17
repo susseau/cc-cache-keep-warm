@@ -1,9 +1,7 @@
 // When to ping and how: pure decisions over what schedule.ts and ping.ts read.
 import type { KeepWarmTtl } from '../../types'
 import { isLongEnoughToKeepWarm, PING_LEAD_MS, PING_MARGIN_MS } from '../cache-timing'
-import type { QuietHours } from '../quiet-hours'
-
-const HOUR_MIN = 60
+import { minuteOfDay, type QuietHours } from '../quiet-hours'
 
 // The visible ping is a real turn, and after a restart Claude Code re-sends the project's
 // instruction files (CLAUDE.md, the files it imports, MEMORY.md) with it: 130k tokens in a big
@@ -73,7 +71,7 @@ export function isQuiet(ms: number, quiet: QuietHours) {
   if (quiet.kind === 'off') return false
   if (quiet.kind === 'invalid') return true
   const at = new Date(ms)
-  const minute = at.getHours() * HOUR_MIN + at.getMinutes()
+  const minute = minuteOfDay(at.getHours(), at.getMinutes())
   const { startMin, endMin } = quiet
   return startMin < endMin ? minute >= startMin && minute < endMin : minute >= startMin || minute < endMin
 }

@@ -30,7 +30,7 @@ function parseRange(range: unknown): QuietHours {
   return { kind: 'on', startMin, endMin }
 }
 
-// Minutes since midnight; RANGE has already checked the hour and the minute.
-function minuteOfDay(hours: number, mins: number) {
+// Minutes since midnight, the unit the quiet hours keep.
+export function minuteOfDay(hours: number, mins: number) {
   return hours * HOUR_MIN + mins
 }
