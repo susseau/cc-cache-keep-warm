@@ -16,6 +16,7 @@
     }
   },
   "review": {
+    "claude_api": false,
     "agents": ["claude", "codex"],
     "timeout": { "min_minutes": 10, "estimate_factor": 3 },
     "plan_light": { "max_tasks": 1, "max_files": 5 },
