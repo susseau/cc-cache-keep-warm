@@ -73,9 +73,9 @@ function countdownOf({ now, lastRequestAt, ttl }: SessionSnapshot): Countdown {
 
 // Only while keep-warm holds a warm cache with a ping announced, and the person has not decided:
 // no stop time of theirs, no question waiting for their answer (a return is then all but sure).
-function shouldAdviseStop({ stopAt, isWaiting, pings, maxPings, returnCurve }: SessionSnapshot, { isWarm, ttlMs }: Countdown, outlook: PingOutlook) {
+function shouldAdviseStop({ lastRequestAt, stopAt, isWaiting, pings, maxPings, returnCurve, quiet }: SessionSnapshot, { isWarm, ttlMs }: Countdown, outlook: PingOutlook) {
   if (!isWarm || stopAt !== 0 || isWaiting || outlook.kind !== 'ping') return false
-  return isLikelyIdle({ firstPingAt: outlook.at, ttlMs, pingsInRow: pings.length, maxPings, curve: returnCurve })
+  return isLikelyIdle({ lastRequestAt, firstPingAt: outlook.at, ttlMs, pingsInRow: pings.length, maxPings, curve: returnCurve, quiet })
 }
 
 // The next ping has to be the visible one but the conversation is too full for it.

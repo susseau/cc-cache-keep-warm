@@ -251,7 +251,7 @@ test('statusText: the quiet hours while keep-warm is on', async () => {
 
 // Three warm pings in a row, 52 min apart, after the request at 10:00.
 const THREE = [1, 2, 3].map(i => ({ at: START + i * 52 * MINUTE, isHit: true, read: 54_000 }))
-const idleCheck = (n: number, maxPings = 6) => ({ firstPingAt: START + 52 * MINUTE, ttlMs: HOUR, pingsInRow: n, maxPings, curve: DEFAULT_RETURN_CURVE })
+const idleCheck = (n: number, maxPings = 6) => ({ lastRequestAt: START, firstPingAt: START + 52 * MINUTE, ttlMs: HOUR, pingsInRow: n, maxPings, curve: DEFAULT_RETURN_CURVE, quiet: QUIET })
 
 test('seriesValues: a ping that pays at n = 2', async () => {
   expect(seriesValues(idleCheck(2))[0]).toBeGreaterThan(0)
@@ -275,10 +275,29 @@ test('isLikelyIdle: past the table the last value', async () => {
   expect(isLikelyIdle(idleCheck(10, 20))).toEqual(true)
 })
 
+// A request at 20:28: the ping at 21:20 holds the cache to 22:20, all but 2 of its 52 min in the quiet hours.
+const eveningCheck = (quiet: QuietHours) => ({ lastRequestAt: at(20, 28), firstPingAt: at(21, 20), ttlMs: HOUR, pingsInRow: 0, maxPings: 6, curve: DEFAULT_RETURN_CURVE, quiet })
+
+test('isLikelyIdle: a ping whose window is mostly quiet hours does not pay', async () => {
+  expect(isLikelyIdle(eveningCheck(QUIET))).toEqual(true)
+  // The second ping, at 22:12, would fall in the quiet hours.
+  expect(seriesValues(eveningCheck(QUIET)).length).toEqual(1)
+})
+
+test('isLikelyIdle: the same ping without quiet hours pays', async () => {
+  expect(isLikelyIdle(eveningCheck({ kind: 'off' }))).toEqual(false)
+})
+
 test('lineModel: likely idle after 3 pings in a row', async () => {
   const line = lineModel(snapshot({ isOn: true, pings: THREE }))
   expect(line.advice).toEqual('󰔢 likely idle: stop?')
   expect(line.tone).toEqual('keeping')
+})
+
+test('lineModel: likely idle before the first ping when its window is quiet hours', async () => {
+  const line = lineModel(snapshot({ isOn: true, lastRequestAt: at(20, 28), now: at(20, 28) }))
+  expect(line.details).toContain('󰁔 ping 21:20')
+  expect(line.advice).toEqual('󰔢 likely idle: stop?')
 })
 
 test('lineModel: no advice where the user decides or keep-warm cannot ping', async () => {

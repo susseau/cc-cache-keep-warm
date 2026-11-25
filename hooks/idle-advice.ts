@@ -1,5 +1,8 @@
 // Whether further pings are likely to pay for themselves: pure, over the session's pings in a row
 // and the chance the person comes back. Advice for the line only: keep-warm never stops by it.
+import { MINUTE_MS, PING_LEAD_MS } from './cache-timing'
+import { isQuiet } from './ping/decide-ping'
+import type { QuietHours } from './quiet-hours'
 import { HOUR_WRITE_PRICE, READ_PRICE } from './savings'
 
 // h[i]: the chance the person comes back in the window the i-th ping of a row adds, given they
@@ -9,8 +12,11 @@ export type ReturnCurve = readonly number[]
 // From the calibration of 2026-11-16: 997 breaks longer than 52 min over 10.7 weeks.
 export const DEFAULT_RETURN_CURVE: ReturnCurve = [0.183, 0.110, 0.063, 0.040, 0.037, 0.023, 0.012, 0.002]
 
-// `firstPingAt`: the ping the line announces; `ttlMs`: the cache's length.
-export type IdleCheck = { firstPingAt: number, ttlMs: number, pingsInRow: number, maxPings: number, curve: ReturnCurve }
+// `lastRequestAt`: the request the cache is warm from; `firstPingAt`: the ping the line announces
+// (outside the quiet hours); `ttlMs`: the cache's length.
+export type IdleCheck = {
+  lastRequestAt: number, firstPingAt: number, ttlMs: number, pingsInRow: number, maxPings: number, curve: ReturnCurve, quiet: QuietHours,
+}
 
 // A return to a warm cache saves its re-write, less reading it.
 const RETURN_GAIN = HOUR_WRITE_PRICE - READ_PRICE
@@ -22,14 +28,18 @@ export function isLikelyIdle(check: IdleCheck) {
 }
 
 // The value of a series of 1..K more pings (K: the pings left in the row), in units of the cache's
-// size: the gain of a return within the series, less a read for each ping sent before it.
-export function seriesValues({ pingsInRow, maxPings, curve }: IdleCheck): number[] {
+// size: the gain of a return within the series, less a read for each ping sent before it. The
+// series ends before a ping that would fall in the quiet hours (nothing goes out, the cache
+// expires), and a return counts only in the part of a ping's window outside them.
+export function seriesValues({ lastRequestAt, firstPingAt, ttlMs, pingsInRow, maxPings, curve, quiet }: IdleCheck): number[] {
   const values: number[] = []
-  let stayed = 1
-  let cost = 0
+  let stayed = 1, cost = 0
   for (let j = 1; j <= maxPings - pingsInRow; j++) {
+    const pingAt = firstPingAt + (j - 1) * (ttlMs - PING_LEAD_MS)
+    if (j >= 2 && isQuiet(pingAt, quiet)) break
+    const windowStart = j === 1 ? lastRequestAt + ttlMs : pingAt - (ttlMs - PING_LEAD_MS) + ttlMs
     cost += READ_PRICE * stayed
-    stayed *= 1 - hazard(curve, pingsInRow + j)
+    stayed *= 1 - hazard(curve, pingsInRow + j) * awakeShare(windowStart, pingAt + ttlMs, quiet)
     values.push(RETURN_GAIN * (1 - stayed) - cost)
   }
   return values
@@ -39,4 +49,16 @@ export function seriesValues({ pingsInRow, maxPings, curve }: IdleCheck): number
 // knows no return.
 function hazard(curve: ReturnCurve, i: number) {
   return curve[Math.min(i, curve.length) - 1] ?? 0
+}
+
+// The share of the full minutes in (from, to], counted from `from`, that fall outside the quiet
+// hours: no one comes back in them.
+function awakeShare(from: number, to: number, quiet: QuietHours) {
+  if (quiet.kind === 'off') return 1
+  const minutes = Math.floor((to - from) / MINUTE_MS)
+  let awake = 0
+  for (let i = 1; i <= minutes; i++) {
+    if (!isQuiet(from + i * MINUTE_MS, quiet)) awake++
+  }
+  return awake / minutes
 }
