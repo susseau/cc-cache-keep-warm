@@ -23,10 +23,11 @@ test kit `claude plugin test` (`claude-code/testing`).
 
 ## File Structure
 
-- `hooks/session-store.ts` — przejmuje zapisane wartości sesji ze `$.store` przy relaunchu i po
-  `/clear`; zależy od: `hooks/state.ts`
-- `hooks/events/session.ts` — prowadzi życie sesji przez start, wznowienie, `/clear` i kompakcję;
-  zależy od: `hooks/session-store.ts`
+- `hooks/session-store.ts` — utrwala wartości sesji w `$.store`; zależy od: `hooks/state.ts`,
+  `hooks/savings.ts`, `types/index.d.ts`
+- `hooks/state.ts` — trzyma stan sesji w `$.state`; zależy od: brak
+- `hooks/events/session.ts` — prowadzi cykl życia sesji Claude Code; zależy od:
+  `hooks/session-store.ts`
 - `hooks/register.tsx` — kieruje zdarzenie `classic.SessionStart` do modułu sesji; zależy od:
   `hooks/events/session.ts`
 - `tests/engine.ts` — odgrywa silnik Claude Code pod modem w testach; zależy od: brak
@@ -45,9 +46,10 @@ test kit `claude plugin test` (`claude-code/testing`).
   `tests/engine.ts:124` (nowe helpery przed `start`)
 - Zmodyfikuj: `tests/keep-warm.test.ts:5`, `tests/keep-warm.test.ts:189-196`,
   `tests/keep-warm.test.ts:258-277`
-- Zmodyfikuj: `hooks/session-store.ts:36-58`
+- Zmodyfikuj: `hooks/session-store.ts:24-25`, `hooks/session-store.ts:36-58`
+- Zmodyfikuj: `hooks/state.ts:125`
 - Zmodyfikuj: `hooks/events/session.ts:9`, `hooks/events/session.ts:53`
-- Zmodyfikuj: `hooks/register.tsx:7`, `hooks/register.tsx:40`
+- Zmodyfikuj: `hooks/register.tsx:7`, `hooks/register.tsx:35`, `hooks/register.tsx:40`
 - Zmodyfikuj: `README.md:239`
 - Zmodyfikuj: `.claude/CLAUDE.md:12`, `.claude/CLAUDE.md:57`, sekcja „Behaviour agreed with the
   owner”
@@ -175,6 +177,18 @@ test('/clear carries the stop time over, under the new session\'s own store entr
   await answer($, engine, WRITE)
   expect(engine.store[`session:${CLEARED_ID}`]).toMatchObject({ keepWarm: true, stopAt: START + 3 * 60 * MINUTE, lastRequestAt: START })
   expect(engine.store['session:S1']).toMatchObject({ keepWarm: true, lastRequestAt: START })
+})
+
+test('/clear with keep-warm on never pings the cleared, cold conversation', async ($, on) => {
+  const { engine, clock } = stubClearableEngine(on)
+  await start($)
+  await answer($, engine, WRITE)
+  await keepwarm($, 'on')
+  await clear($, engine)
+  await clock.advance(70 * MINUTE)
+  expect(engine.forks).toBe(0)
+  expect(engine.submitted).toEqual([])
+  expect(await line($)).toEqual('nothing cached yet······ 󰓛 Stop ')
 })
 ```
 
