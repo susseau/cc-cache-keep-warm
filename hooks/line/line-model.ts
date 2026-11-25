@@ -1,7 +1,7 @@
 // What the line above the prompt says, decided from the session's values alone.
-import { HOUR_MS, isLongEnoughToKeepWarm, MINUTE_MS, PING_LEAD_MS } from '../cache-timing'
+import { HOUR_MS, isLongEnoughToKeepWarm, MINUTE_MS } from '../cache-timing'
 import { cacheLength, clockOfDay, clockTime, minutes, timeLeft, tokens } from '../format'
-import { isIdleInPingWindow, isQuiet } from '../ping/decide-ping'
+import { isHeldByQuiet, isIdleInPingWindow, pingWindowOpensAfter } from '../ping/decide-ping'
 import type { QuietHours } from '../quiet-hours'
 import { netSaving } from '../savings'
 import { needsVisiblePing, type SessionSnapshot } from '../session-snapshot'
@@ -47,8 +47,8 @@ export function lineModel(session: SessionSnapshot): LineModel {
   const outlook = pingOutlookOf(session, countdown)
   const canKeepWarm = isLongEnoughToKeepWarm(ttl)
   // A cold cache is no ping missed: keep-warm restarts after the next message.
-  const willPing = !countdown.isWarm || outlook.kind === 'ping'
-  const isKeepingWarm = isOn && canKeepWarm && !session.pingError && !isBlocked(session) && willPing
+  const isPingOnTrack = !countdown.isWarm || outlook.kind === 'ping'
+  const isKeepingWarm = isOn && canKeepWarm && !session.pingError && !isBlocked(session) && isPingOnTrack
   return {
     filledCells: filledCells(countdown),
     tone: isKeepingWarm ? 'keeping' : isOn ? 'stalled' : 'off',
@@ -72,21 +72,21 @@ function isBlocked(session: SessionSnapshot) {
 }
 
 // What the full-minute checks will do with this cache, as `decidePing` decides at each of them:
-// ping at the first check in the ping window outside the quiet hours (a stop time overrides them),
-// hold for the quiet hours when every check left in the window falls in them, or nothing when no
-// check is left in the window.
+// ping at the first check in the ping window before the stop time and outside the quiet hours (a
+// stop time overrides them), hold for the quiet hours when every check left falls in them, or
+// nothing when no check is left (keep-warm switches itself off at the stop time).
 function pingOutlookOf(session: SessionSnapshot, { ttlMs }: Countdown): PingOutlook {
   const checks = checksInPingWindow(session, ttlMs)
   if (checks.length === 0) return { kind: 'none' }
-  const at = checks.find(check => session.stopAt > 0 || !isQuiet(check, session.quiet))
+  const at = checks.find(check => !isHeldByQuiet(check, session.stopAt, session.quiet))
   return at === undefined ? { kind: 'quiet' } : { kind: 'ping', at }
 }
 
-// The full-minute checks from now on that fall in the ping window.
-function checksInPingWindow({ lastRequestAt, now }: SessionSnapshot, ttlMs: number) {
+// The full-minute checks from now on that fall in the ping window and before the stop time.
+function checksInPingWindow({ lastRequestAt, now, stopAt }: SessionSnapshot, ttlMs: number) {
   const checks: number[] = []
-  let check = Math.ceil(Math.max(lastRequestAt + ttlMs - PING_LEAD_MS, now) / MINUTE_MS) * MINUTE_MS
-  while (isIdleInPingWindow(check - lastRequestAt, ttlMs)) {
+  let check = Math.ceil(Math.max(lastRequestAt + pingWindowOpensAfter(ttlMs), now) / MINUTE_MS) * MINUTE_MS
+  while (isIdleInPingWindow(check - lastRequestAt, ttlMs) && (stopAt === 0 || check < stopAt)) {
     checks.push(check)
     check += MINUTE_MS
   }

@@ -52,7 +52,7 @@ export type PingStep = 'none' | 'stop-at-time' | 'stop-after-max' | 'quiet' | 'p
 export function decidePing(check: PingCheck): PingStep {
   if (check.stopAt > 0 && check.now >= check.stopAt) return 'stop-at-time'
   if (!isInPingWindow(check) || check.now < check.pendingUntil) return 'none'
-  if (check.stopAt === 0 && isQuiet(check.now, check.quiet)) return 'quiet'
+  if (isHeldByQuiet(check.now, check.stopAt, check.quiet)) return 'quiet'
   if (check.stopAt === 0 && check.pingsInRow >= check.maxPings) return 'stop-after-max'
   if (!check.needsVisible) return 'ping'
   return check.nearlyFull ? 'blocked' : 'visible-ping'
@@ -66,7 +66,17 @@ function isInPingWindow({ ttl, lastRequestAt, now }: PingCheck) {
 
 // PING_LEAD_MS before the cache expires, and never in its last minute: a cold cache is never pinged.
 export function isIdleInPingWindow(idleMs: number, ttlMs: number) {
-  return idleMs >= ttlMs - PING_LEAD_MS && idleMs < ttlMs - PING_MARGIN_MS
+  return idleMs >= pingWindowOpensAfter(ttlMs) && idleMs < ttlMs - PING_MARGIN_MS
+}
+
+// How long after the last request the ping window opens.
+export function pingWindowOpensAfter(ttlMs: number) {
+  return ttlMs - PING_LEAD_MS
+}
+
+// No ping at this moment: it falls in the quiet hours and no stop time overrides them.
+export function isHeldByQuiet(at: number, stopAt: number, quiet: QuietHours) {
+  return stopAt === 0 && isQuiet(at, quiet)
 }
 
 // Whether a moment falls in the quiet hours, in local time; a setting that could not be read

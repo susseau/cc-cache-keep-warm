@@ -231,6 +231,13 @@ test('lineModel: no ping is announced once no check is left in the ping window',
   expect(lineModel(snapshot({ isOn: true, now: START + 59 * MINUTE, contextTokens: 0 })).details).toEqual(['󰔟 expires 11:00'])
 })
 
+test('lineModel: no ping is announced after the stop time', async () => {
+  const early = lineModel(snapshot({ isOn: true, stopAt: START + 40 * MINUTE }))
+  expect(early.tone).toEqual('stalled')
+  expect(early.details).toEqual(['󰔟 expires 11:00', 'keep-warm stops 10:40', '54k cached'])
+  expect(lineModel(snapshot({ isOn: true, stopAt: START + 55 * MINUTE })).details).toContain('󰁔 ping 10:52')
+})
+
 test('statusText: the quiet hours while keep-warm is on', async () => {
   const lines = (quiet: QuietHours) => statusText(snapshot({ isOn: true, quiet }), 6).split('\n')
   expect(lines(QUIET)[1]).toEqual('Quiet hours 21:30–08:00: no pings then (a stop time overrides them).')
