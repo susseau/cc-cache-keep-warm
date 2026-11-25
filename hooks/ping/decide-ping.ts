@@ -50,19 +50,38 @@ export type PingStep = 'none' | 'stop-at-time' | 'stop-after-max' | 'quiet' | 'p
 
 // One check of a session with keep-warm on. A stop time overrides the quiet hours.
 export function decidePing(check: PingCheck): PingStep {
-  if (check.stopAt > 0 && check.now >= check.stopAt) return 'stop-at-time'
+  if (isPastStopTime(check.now, check.stopAt)) return 'stop-at-time'
   if (!isInPingWindow(check) || check.now < check.pendingUntil) return 'none'
-  if (check.stopAt === 0 && isQuiet(check.now, check.quiet)) return 'quiet'
+  if (isHeldByQuiet(check.now, check.stopAt, check.quiet)) return 'quiet'
   if (check.stopAt === 0 && check.pingsInRow >= check.maxPings) return 'stop-after-max'
   if (!check.needsVisible) return 'ping'
   return check.nearlyFull ? 'blocked' : 'visible-ping'
 }
 
-// A cache long enough to keep warm, PING_LEAD_MS before it expires, and never in its last minute.
+// A cache long enough to keep warm, in its ping window.
 function isInPingWindow({ ttl, lastRequestAt, now }: PingCheck) {
   if (!ttl || !isLongEnoughToKeepWarm(ttl) || lastRequestAt <= 0) return false
-  const idle = now - lastRequestAt
-  return idle >= ttl.ms - PING_LEAD_MS && idle < ttl.ms - PING_MARGIN_MS
+  return isIdleInPingWindow(now - lastRequestAt, ttl.ms)
+}
+
+// PING_LEAD_MS before the cache expires, and never in its last minute: a cold cache is never pinged.
+export function isIdleInPingWindow(idleMs: number, ttlMs: number) {
+  return idleMs >= pingWindowOpensAfter(ttlMs) && idleMs < ttlMs - PING_MARGIN_MS
+}
+
+// How long after the last request the ping window opens.
+export function pingWindowOpensAfter(ttlMs: number) {
+  return ttlMs - PING_LEAD_MS
+}
+
+// Keep-warm switches itself off at the stop time, if one was given.
+export function isPastStopTime(at: number, stopAt: number) {
+  return stopAt > 0 && at >= stopAt
+}
+
+// No ping at this moment: it falls in the quiet hours and no stop time overrides them.
+export function isHeldByQuiet(at: number, stopAt: number, quiet: QuietHours) {
+  return stopAt === 0 && isQuiet(at, quiet)
 }
 
 // Whether a moment falls in the quiet hours, in local time; a setting that could not be read

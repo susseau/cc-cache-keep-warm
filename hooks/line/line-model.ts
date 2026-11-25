@@ -1,7 +1,7 @@
 // What the line above the prompt says, decided from the session's values alone.
-import { HOUR_MS, isLongEnoughToKeepWarm, MINUTE_MS, PING_LEAD_MS } from '../cache-timing'
+import { HOUR_MS, isLongEnoughToKeepWarm, MINUTE_MS } from '../cache-timing'
 import { cacheLength, clockOfDay, clockTime, minutes, timeLeft, tokens } from '../format'
-import { isQuiet } from '../ping/decide-ping'
+import { isHeldByQuiet, isIdleInPingWindow, isPastStopTime, pingWindowOpensAfter } from '../ping/decide-ping'
 import type { QuietHours } from '../quiet-hours'
 import { netSaving } from '../savings'
 import { needsVisiblePing, type SessionSnapshot } from '../session-snapshot'
@@ -37,16 +37,23 @@ export type LineModel = {
 // The countdown as the line sees it: the latest of the last tick and the last request.
 type Countdown = { ttlMs: number, expiresAt: number, remaining: number, isWarm: boolean }
 
+// What the next full-minute checks will do with the cache: ping at `at`, hold it for the quiet
+// hours, or nothing (no check left in the ping window, the cache cold included).
+type PingOutlook = { kind: 'ping', at: number } | { kind: 'quiet' } | { kind: 'none' }
+
 export function lineModel(session: SessionSnapshot): LineModel {
   const { lastRequestAt, ttl, isOn } = session
   const countdown = countdownOf(session)
+  const outlook = pingOutlookOf(session, countdown)
   const canKeepWarm = isLongEnoughToKeepWarm(ttl)
-  const isKeepingWarm = isOn && canKeepWarm && !session.pingError && !isBlocked(session) && !isHeldByQuiet(session, countdown)
+  // A cold cache is no ping missed: keep-warm restarts after the next message.
+  const isPingOnTrack = !countdown.isWarm || outlook.kind === 'ping'
+  const isKeepingWarm = isOn && canKeepWarm && !session.pingError && !isBlocked(session) && isPingOnTrack
   return {
     filledCells: filledCells(countdown),
     tone: isKeepingWarm ? 'keeping' : isOn ? 'stalled' : 'off',
     main: lastRequestAt === 0 ? 'nothing cached yet' : countdown.isWarm ? timeLeft(countdown.remaining) : `cold since ${clockTime(countdown.expiresAt)}`,
-    details: [...waitingDetails(session, countdown), ...expiryDetails(session, countdown, isKeepingWarm), ...keepWarmDetails(session, countdown), ...savingsDetails(session), ...cachedDetails(session, countdown, isKeepingWarm)],
+    details: [...waitingDetails(session, countdown), ...expiryDetails(session, countdown, isKeepingWarm), ...keepWarmDetails(session, outlook), ...savingsDetails(session), ...cachedDetails(session, countdown, isKeepingWarm)],
     canToggle: isOn || !ttl || canKeepWarm || ttl.reason === 'overage' || ttl.reason === 'observed',
     isOn,
   }
@@ -64,15 +71,26 @@ function isBlocked(session: SessionSnapshot) {
   return needsVisiblePing(session) && session.nearlyFull
 }
 
-// Pings go out only on the full-minute checks: the first one in the window, or the next one when
-// the window is already open; `decidePing` checks the quiet hours at that same check.
-function nextPingAt({ lastRequestAt, now }: SessionSnapshot, { ttlMs }: Countdown) {
-  return Math.ceil(Math.max(lastRequestAt + ttlMs - PING_LEAD_MS, now) / MINUTE_MS) * MINUTE_MS
+// What the full-minute checks will do with this cache, as `decidePing` decides at each of them:
+// ping at the first check in the ping window before the stop time and outside the quiet hours (a
+// stop time overrides them), hold for the quiet hours when every check left falls in them, or
+// nothing when no check is left (keep-warm switches itself off at the stop time).
+function pingOutlookOf(session: SessionSnapshot, { ttlMs }: Countdown): PingOutlook {
+  const checks = checksInPingWindow(session, ttlMs)
+  if (checks.length === 0) return { kind: 'none' }
+  const at = checks.find(check => !isHeldByQuiet(check, session.stopAt, session.quiet))
+  return at === undefined ? { kind: 'quiet' } : { kind: 'ping', at }
 }
 
-// The next ping would fall in the quiet hours and no stop time overrides them: none goes out.
-function isHeldByQuiet(session: SessionSnapshot, countdown: Countdown) {
-  return session.stopAt === 0 && countdown.isWarm && isQuiet(nextPingAt(session, countdown), session.quiet)
+// The full-minute checks from now on that fall in the ping window and before the stop time.
+function checksInPingWindow({ lastRequestAt, now, stopAt }: SessionSnapshot, ttlMs: number) {
+  const checks: number[] = []
+  let check = Math.ceil(Math.max(lastRequestAt + pingWindowOpensAfter(ttlMs), now) / MINUTE_MS) * MINUTE_MS
+  while (isIdleInPingWindow(check - lastRequestAt, ttlMs) && !isPastStopTime(check, stopAt)) {
+    checks.push(check)
+    check += MINUTE_MS
+  }
+  return checks
 }
 
 function quietDetail(quiet: QuietHours) {
@@ -90,7 +108,7 @@ function waitingDetails({ isWaiting }: SessionSnapshot, { isWarm }: Countdown) {
   return isWaiting && isWarm ? ['waiting for your answer'] : []
 }
 
-function keepWarmDetails(session: SessionSnapshot, countdown: Countdown): string[] {
+function keepWarmDetails(session: SessionSnapshot, outlook: PingOutlook): string[] {
   const { ttl } = session
   if (ttl && !isLongEnoughToKeepWarm(ttl)) {
     if (ttl.reason === 'observed') return [`cache expired after ${minutes(session.shortAfterMs)} min, sooner than expected`, 'keep-warm paused']
@@ -100,20 +118,20 @@ function keepWarmDetails(session: SessionSnapshot, countdown: Countdown): string
   if (!session.isOn) return []
   return [
     ...(session.stopAt ? [`keep-warm stops ${clockTime(session.stopAt)}`] : []),
-    ...nextPingDetails(session, countdown),
+    ...nextPingDetails(session, outlook),
     ...pingCountDetails(session),
   ]
 }
 
 // With the cache length unknown no ping can go out; before the conversation has answered in
 // this run the next one is the visible ping.
-function nextPingDetails(session: SessionSnapshot, countdown: Countdown) {
+function nextPingDetails(session: SessionSnapshot, outlook: PingOutlook) {
   if (session.pingError) return [`ping failed: ${session.pingError}`]
   if (!session.ttl) return [WAITS_TEXT]
   if (isBlocked(session)) return [NEARLY_FULL_TEXT]
-  if (!countdown.isWarm) return []
-  if (isHeldByQuiet(session, countdown)) return [quietDetail(session.quiet)]
-  return [`${NEXT_ICON} ping ${clockTime(nextPingAt(session, countdown))}${needsVisiblePing(session) ? SHOWS_IN_CHAT : ''}`]
+  if (outlook.kind === 'none') return []
+  if (outlook.kind === 'quiet') return [quietDetail(session.quiet)]
+  return [`${NEXT_ICON} ping ${clockTime(outlook.at)}${needsVisiblePing(session) ? SHOWS_IN_CHAT : ''}`]
 }
 
 function pingCountDetails({ pings }: SessionSnapshot) {
