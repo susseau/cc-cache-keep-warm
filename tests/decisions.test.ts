@@ -283,7 +283,7 @@ test('isLikelyIdle: a ping whose window is mostly quiet hours does not pay', asy
   // The second ping, at 22:12, would fall in the quiet hours.
   expect(seriesValues(eveningCheck(QUIET)).length).toEqual(1)
   // 21:28 and 21:29 are outside them: f₁ = 2/52.
-  expect(Math.round(seriesValues(eveningCheck(QUIET))[0] * 1e9)).toEqual(Math.round((1.9 * 0.183 * 2 / 52 - 0.1) * 1e9))
+  expect(Math.round((seriesValues(eveningCheck(QUIET))[0] ?? NaN) * 1e9)).toEqual(Math.round((1.9 * 0.183 * 2 / 52 - 0.1) * 1e9))
 })
 
 test('isLikelyIdle: the same ping without quiet hours pays', async () => {
