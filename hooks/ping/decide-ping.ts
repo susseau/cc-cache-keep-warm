@@ -58,11 +58,15 @@ export function decidePing(check: PingCheck): PingStep {
   return check.nearlyFull ? 'blocked' : 'visible-ping'
 }
 
-// A cache long enough to keep warm, PING_LEAD_MS before it expires, and never in its last minute.
+// A cache long enough to keep warm, in its ping window.
 function isInPingWindow({ ttl, lastRequestAt, now }: PingCheck) {
   if (!ttl || !isLongEnoughToKeepWarm(ttl) || lastRequestAt <= 0) return false
-  const idle = now - lastRequestAt
-  return idle >= ttl.ms - PING_LEAD_MS && idle < ttl.ms - PING_MARGIN_MS
+  return isIdleInPingWindow(now - lastRequestAt, ttl.ms)
+}
+
+// PING_LEAD_MS before the cache expires, and never in its last minute: a cold cache is never pinged.
+export function isIdleInPingWindow(idleMs: number, ttlMs: number) {
+  return idleMs >= ttlMs - PING_LEAD_MS && idleMs < ttlMs - PING_MARGIN_MS
 }
 
 // Whether a moment falls in the quiet hours, in local time; a setting that could not be read
