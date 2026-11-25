@@ -1,6 +1,7 @@
 // What the line above the prompt says, decided from the session's values alone.
 import { HOUR_MS, isLongEnoughToKeepWarm, MINUTE_MS } from '../cache-timing'
 import { cacheLength, clockOfDay, clockTime, minutes, timeLeft, tokens } from '../format'
+import { isLikelyIdle } from '../idle-advice'
 import { isHeldByQuiet, isIdleInPingWindow, isPastStopTime, pingWindowOpensAfter } from '../ping/decide-ping'
 import type { QuietHours } from '../quiet-hours'
 import { netSaving } from '../savings'
@@ -11,6 +12,7 @@ import { filledCells } from './bar-model'
 const NEXT_ICON = '󰁔'
 const EXPIRES_ICON = '󰔟'
 const SAVINGS_ICON = '󰆼'
+const LIKELY_IDLE_TEXT = '󰔢 likely idle: stop?'
 // With keep-warm off, the band names what is at stake once this little time is left.
 const EXPIRING_MS = 10 * MINUTE_MS
 const WAITS_TEXT = 'keep-warm starts after your next message'
@@ -29,6 +31,8 @@ export type LineModel = {
   // keep-warm is on, so the text does not repeat it.
   main: string
   details: string[]
+  // Advice, not a decision: keep-warm never switches itself off because of it.
+  advice: string
   // No toggle where keep-warm can never ping (an API key, or a short cache set on purpose).
   canToggle: boolean
   isOn: boolean
@@ -54,6 +58,7 @@ export function lineModel(session: SessionSnapshot): LineModel {
     tone: isKeepingWarm ? 'keeping' : isOn ? 'stalled' : 'off',
     main: lastRequestAt === 0 ? 'nothing cached yet' : countdown.isWarm ? timeLeft(countdown.remaining) : `cold since ${clockTime(countdown.expiresAt)}`,
     details: [...waitingDetails(session, countdown), ...expiryDetails(session, countdown, isKeepingWarm), ...keepWarmDetails(session, outlook), ...savingsDetails(session), ...cachedDetails(session, countdown, isKeepingWarm)],
+    advice: isKeepingWarm && shouldAdviseStop(session, countdown, outlook) ? LIKELY_IDLE_TEXT : '',
     canToggle: isOn || !ttl || canKeepWarm || ttl.reason === 'overage' || ttl.reason === 'observed',
     isOn,
   }
@@ -64,6 +69,13 @@ function countdownOf({ now, lastRequestAt, ttl }: SessionSnapshot): Countdown {
   const expiresAt = lastRequestAt + ttlMs
   const remaining = expiresAt - Math.max(now, lastRequestAt)
   return { ttlMs, expiresAt, remaining, isWarm: lastRequestAt > 0 && remaining > 0 }
+}
+
+// Only while keep-warm holds a warm cache with a ping announced, and the person has not decided:
+// no stop time of theirs, no question waiting for their answer (a return is then all but sure).
+function shouldAdviseStop({ stopAt, isWaiting, pings, maxPings, returnCurve }: SessionSnapshot, { isWarm, ttlMs }: Countdown, outlook: PingOutlook) {
+  if (!isWarm || stopAt !== 0 || isWaiting || outlook.kind !== 'ping') return false
+  return isLikelyIdle({ firstPingAt: outlook.at, ttlMs, pingsInRow: pings.length, maxPings, curve: returnCurve })
 }
 
 // The next ping has to be the visible one but the conversation is too full for it.
