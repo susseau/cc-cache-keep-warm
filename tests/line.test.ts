@@ -2,7 +2,7 @@
 // Run (from the repo root): claude plugin test
 import { expect, test } from 'claude-code/testing'
 
-import { answer, line, MINUTE, pressToggle, start, stubEngine, WRITE } from './engine'
+import { answer, keepwarm, line, MINUTE, pressToggle, start, stubEngine, WRITE } from './engine'
 
 test('before any answer: nothing cached yet', async ($, on) => {
   stubEngine(on)
@@ -93,4 +93,33 @@ test('a hidden survey takes the slot', async ($, on) => {
   await start($)
   const ui = await $.ui.mount({ plugin: 'cache-keep-warm', viewport: { columns: 200, rows: 5 }, surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: true } } as any)
   expect((await ui.find({ type: 'Box' }))?.text ?? '').toEqual('')
+})
+
+test('likely idle after 3 pings in a row, until Stop', async ($, on) => {
+  const { engine, clock } = stubEngine(on)
+  await start($)
+  await answer($, engine, WRITE)
+  await keepwarm($, 'on')
+  await clock.advance(52 * MINUTE)
+  await clock.advance(52 * MINUTE)
+  expect(await line($)).not.toContain('likely idle')
+  await clock.advance(52 * MINUTE)
+  expect(await line($)).toContain('54k cached·󰔢 likely idle: stop?·')
+  await clock.advance(10 * MINUTE)
+  expect(await line($)).toContain('54k cached·󰔢 likely idle: stop?·')
+  expect(await keepwarm($, 'status')).toStartWith('Keep-warm on')
+  await pressToggle($)
+  expect(await line($)).not.toContain('likely idle')
+})
+
+test('likely idle in mustard', async ($, on) => {
+  const { engine, clock } = stubEngine(on)
+  await start($)
+  await answer($, engine, WRITE)
+  await keepwarm($, 'on')
+  for (let i = 0; i < 3; i++) await clock.advance(52 * MINUTE)
+  const ui = await $.ui.mount({ plugin: 'cache-keep-warm', viewport: { columns: 200, rows: 5 }, surface: 'terminal', component: 'AbovePrompt', props: {} } as any)
+  const advice = (await ui.findAll({ type: 'Text' })).find((t: any) => t.text === '󰔢 likely idle: stop?')
+  expect(advice).toBeDefined()
+  expect(advice?.props.color).toEqual('#b5a55f')
 })

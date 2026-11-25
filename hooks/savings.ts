@@ -6,8 +6,8 @@ import type { ModelUsage } from 'claude-code'
 import type { KeepWarmSavings, KeepWarmTtl } from '../types'
 import { isCacheHit } from './cache-timing'
 
-const READ_PRICE = 0.1
-const HOUR_WRITE_PRICE = 2
+export const READ_PRICE = 0.1
+export const HOUR_WRITE_PRICE = 2
 const OUTPUT_PRICE = 5
 
 export const NO_SAVINGS: KeepWarmSavings = { pings: 0, pingCost: 0, returns: 0, saved: 0 }

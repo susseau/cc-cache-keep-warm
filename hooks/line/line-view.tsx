@@ -30,7 +30,8 @@ export type LineComponents = ReturnType<EngineInterface['ui']['resolve']>
 // the bar last, so the bar keeps its place while the text before it changes length. Each part is
 // its own element and the spacing comes from the layout (column gaps), which no surface squeezes
 // the way it squeezes runs of spaces inside one text. In a narrow window nothing wraps: the time,
-// the bar and the button keep their size and the details are cut.
+// the bar and the button keep their size and the details are cut. The advice, in mustard, stands
+// outside the details, last before the time: the details are cut first and it stays by the button.
 export function drawLine(components: LineComponents, model: LineModel, onToggle: () => void) {
   const { Box, Text } = components
   const color = TONE_COLORS[model.tone]
@@ -40,6 +41,7 @@ export function drawLine(components: LineComponents, model: LineModel, onToggle:
       <Box flexShrink={1} minWidth={0} overflow="hidden" flexWrap="nowrap" alignItems="center" columnGap={PART_GAP}>
         {model.details.flatMap(detail => [dim(detail), dim('·')])}
       </Box>
+      {model.advice ? <><Box flexShrink={0}><Text color={TONE_COLORS.stalled}>{model.advice}</Text></Box>{dim('·')}</> : null}
       <Box flexShrink={0}><Text>{model.main}</Text></Box>
       <Box flexShrink={0}>
         {color ? <Text color={color}>{BAR_FULL.repeat(model.filledCells)}</Text> : <Text dimColor>{BAR_FULL.repeat(model.filledCells)}</Text>}

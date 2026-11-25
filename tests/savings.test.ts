@@ -2,6 +2,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { statusText } from '../hooks/command'
+import { DEFAULT_RETURN_CURVE } from '../hooks/idle-advice'
 import { lineModel } from '../hooks/line/line-model'
 import { parseQuietHours } from '../hooks/quiet-hours'
 import { addPing, addSavedReturn, isSavedReturn, NO_SAVINGS, requestCost } from '../hooks/savings'
@@ -16,7 +17,8 @@ const NOT_PAID_BACK = { pings: 1, pingCost: 5_035, returns: 0, saved: 0 }
 const snapshot = (fields: Partial<SessionSnapshot> = {}): SessionSnapshot => ({
   lastRequestAt: START, now: START, isOn: false, stopAt: 0, pings: [], ttl: SUBSCRIPTION_TTL, contextTokens: 54_000,
   isWaiting: false, shortAfterMs: 0, waitsForMessage: false, sawResponse: true, pingError: '', nearlyFull: false,
-  lastRealRequestAt: START, lastWarmPingAt: 0, savings: NO_SAVINGS, quiet: parseQuietHours(undefined, undefined), ...fields,
+  lastRealRequestAt: START, lastWarmPingAt: 0, savings: NO_SAVINGS, quiet: parseQuietHours(undefined, undefined), maxPings: 6,
+  returnCurve: DEFAULT_RETURN_CURVE, ...fields,
 })
 
 test('requestCost: input 1, cache read 0.1, 1-hour write 2, output 5', async () => {
@@ -67,14 +69,14 @@ test('lineModel: no account before the first ping', async () => {
 
 test('statusText: pings, saved returns, cost and a net saving', async () => {
   const savings = { pings: 3, pingCost: 15_105, returns: 1, saved: 95_000 }
-  expect(statusText(snapshot({ savings }), 8).split('\n')).toContain('This session: 3 pings cost 15k, 1 return to a warm cache saved 95k: 80k saved (input-token equivalents).')
+  expect(statusText(snapshot({ savings })).split('\n')).toContain('This session: 3 pings cost 15k, 1 return to a warm cache saved 95k: 80k saved (input-token equivalents).')
 })
 
 test('statusText: pings not paid back yet are spent', async () => {
   const savings = { pings: 1, pingCost: 5_035, returns: 0, saved: 0 }
-  expect(statusText(snapshot({ savings }), 8).split('\n')).toContain('This session: 1 ping cost 5k, 0 returns to a warm cache saved 0k: 5k spent (input-token equivalents).')
+  expect(statusText(snapshot({ savings })).split('\n')).toContain('This session: 1 ping cost 5k, 0 returns to a warm cache saved 0k: 5k spent (input-token equivalents).')
 })
 
 test('statusText: no account before the first ping', async () => {
-  expect(statusText(snapshot({}), 8)).not.toContain('This session:')
+  expect(statusText(snapshot({}))).not.toContain('This session:')
 })

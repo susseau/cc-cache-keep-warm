@@ -8,7 +8,7 @@ import { switchOff, switchOn } from './keep-warm-switch'
 import type { QuietHours, QuietInvalid } from './quiet-hours'
 import { netSaving } from './savings'
 import { needsVisiblePing, type SessionSnapshot } from './session-snapshot'
-import { live, readSnapshot } from './state'
+import { readSnapshot } from './state'
 
 export const COMMAND = {
   name: 'keepwarm',
@@ -32,7 +32,7 @@ export async function runKeepwarm($: EngineInterface, args: string) {
     if (stopAt < 0) return { text: NOT_UNDERSTOOD }
     await switchOn($, stopAt)
   }
-  return { text: statusText(await readSnapshot($), live.maxPings) }
+  return { text: statusText(await readSnapshot($)) }
 }
 
 // "3h", "90m", "until 18:00" -> when keep-warm stops; 0 = no stop time; -1 = not understood.
@@ -47,8 +47,8 @@ export function parseStop(text: string, now: number) {
   return at.getTime() > now ? at.getTime() : at.getTime() + 24 * HOUR_MS
 }
 
-export function statusText(session: SessionSnapshot, maxPings: number) {
-  const { isOn, stopAt, ttl, pings, savings } = session
+export function statusText(session: SessionSnapshot) {
+  const { isOn, stopAt, ttl, pings, savings, maxPings } = session
   const lines = [
     isOn
       ? `Keep-warm on${stopAt ? ` until ${clockTime(stopAt)}` : ` (stops itself after ${maxPings} pings in a row)`}: about ${minutes(PING_LEAD_MS)} min before the cache would expire, it re-reads the conversation from cache in the background. A cold cache is never pinged.`

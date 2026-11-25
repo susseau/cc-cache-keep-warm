@@ -24,6 +24,7 @@ export type KeepWarmSavings = { pings: number; pingCost: number; returns: number
  * How long the main conversation's cache lives, and why: from a setting, from the plan, or
  * corrected by what the cache actually did. Null until it can be told. The last one the plan
  * showed is also kept in `$.store` under `plan-ttl`, shared by every session.
+ * $.store also holds return-curve, shared by every session: the chance of a return within each further ping's window, 1 to 20 numbers from 0 to 1; any other value means the default curve.
  */
 export type KeepWarmTtl = { ms: number; reason: 'subscription' | 'api' | 'overage' | 'setting' | 'observed' } | null
 

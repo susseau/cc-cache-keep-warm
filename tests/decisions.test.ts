@@ -3,6 +3,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { DEFAULT_MAX_PINGS, pingLimit } from '../hooks/cache-timing'
 import { parseStop, statusText } from '../hooks/command'
+import { DEFAULT_RETURN_CURVE, isLikelyIdle, parseReturnCurve, seriesValues } from '../hooks/idle-advice'
 import { NO_SAVINGS } from '../hooks/savings'
 import { lineModel } from '../hooks/line/line-model'
 import { decidePing, isQuiet, isTooFullForVisiblePing, type PingCheck } from '../hooks/ping/decide-ping'
@@ -169,19 +170,20 @@ test('parseStop: a duration, a clock time (tomorrow once past), or not understoo
 const snapshot = (fields: Partial<SessionSnapshot> = {}): SessionSnapshot => ({
   lastRequestAt: START, now: START, isOn: false, stopAt: 0, pings: [], ttl: SUBSCRIPTION_TTL, contextTokens: 54_000,
   isWaiting: false, shortAfterMs: 0, waitsForMessage: false, sawResponse: true, pingError: '', nearlyFull: false,
-  lastRealRequestAt: START, lastWarmPingAt: 0, savings: NO_SAVINGS, quiet: QUIET, ...fields,
+  lastRealRequestAt: START, lastWarmPingAt: 0, savings: NO_SAVINGS, quiet: QUIET, maxPings: DEFAULT_MAX_PINGS,
+  returnCurve: DEFAULT_RETURN_CURVE, ...fields,
 })
 
 test('statusText: on, its ping history and a short cache', async () => {
   const on = snapshot({ isOn: true, pings: [{ at: START, isHit: true, read: 54_000 }, { at: START + HOUR, isHit: false, read: 0 }] })
-  expect(statusText(on, 6).split('\n')[0]).toContain('(stops itself after 6 pings in a row)')
-  expect(statusText(on, 6).split('\n').slice(-2)).toEqual(['10:00 · read 54k from cache', '11:00 · found the cache cold'])
-  expect(statusText(snapshot({ ttl: API_TTL }), 6).split('\n')).toContain('Keep-warm only pings a cache of 30 min or longer.')
+  expect(statusText(on).split('\n')[0]).toContain('(stops itself after 6 pings in a row)')
+  expect(statusText(on).split('\n').slice(-2)).toEqual(['10:00 · read 54k from cache', '11:00 · found the cache cold'])
+  expect(statusText(snapshot({ ttl: API_TTL })).split('\n')).toContain('Keep-warm only pings a cache of 30 min or longer.')
 })
 
 test('lineModel: keeping while on and able to ping, stalled while on and not, off while off', async () => {
   expect(lineModel(snapshot({ isOn: true }))).toEqual({
-    filledCells: 6, tone: 'keeping', main: '60 min left', details: ['󰁔 ping 10:52', '54k cached'], canToggle: true, isOn: true,
+    filledCells: 6, tone: 'keeping', main: '60 min left', details: ['󰁔 ping 10:52', '54k cached'], advice: '', canToggle: true, isOn: true,
   })
   expect(lineModel(snapshot({ isOn: true, pingError: 'HTTP 400' })).tone).toEqual('stalled')
   expect(lineModel(snapshot({ isOn: true, pingError: 'HTTP 400' })).details[0]).toEqual('󰔟 expires 11:00')
@@ -239,10 +241,93 @@ test('lineModel: no ping is announced after the stop time', async () => {
 })
 
 test('statusText: the quiet hours while keep-warm is on', async () => {
-  const lines = (quiet: QuietHours) => statusText(snapshot({ isOn: true, quiet }), 6).split('\n')
+  const lines = (quiet: QuietHours) => statusText(snapshot({ isOn: true, quiet })).split('\n')
   expect(lines(QUIET)[1]).toEqual('Quiet hours 21:30–08:00: no pings then (a stop time overrides them).')
   expect(lines({ kind: 'off' })[1]).toEqual('Quiet hours: off.')
   expect(lines({ kind: 'invalid', setting: 'range', text: 'nights' })[1]).toEqual('Quiet hours range "nights" not understood (use HH:MM-HH:MM); keep-warm will not ping without a stop time until it is fixed.')
   expect(lines({ kind: 'invalid', setting: 'switch', text: 'yes' })[1]).toEqual('Quiet hours setting "yes" not understood (use true or false); keep-warm will not ping without a stop time until it is fixed.')
-  expect(statusText(snapshot({}), 6)).not.toContain('Quiet hours')
+  expect(statusText(snapshot({}))).not.toContain('Quiet hours')
+})
+
+// Three warm pings in a row, 52 min apart, after the request at 10:00.
+const THREE = [1, 2, 3].map(i => ({ at: START + i * 52 * MINUTE, isHit: true, read: 54_000 }))
+const idleCheck = (n: number, maxPings = 6) => ({ lastRequestAt: START, firstPingAt: START + 52 * MINUTE, ttlMs: HOUR, pingsInRow: n, maxPings, curve: DEFAULT_RETURN_CURVE, quiet: QUIET })
+
+test('seriesValues: a ping that pays at n = 2', async () => {
+  expect(seriesValues(idleCheck(2))[0]).toBeGreaterThan(0)
+})
+
+test('isLikelyIdle: no series pays from n = 3 with the default curve', async () => {
+  expect(isLikelyIdle(idleCheck(3))).toEqual(true)
+  expect(seriesValues(idleCheck(3)).every(value => value <= 0)).toEqual(true)
+})
+
+test('isLikelyIdle: worth it at n = 0, 1, 2', async () => {
+  expect([0, 1, 2].map(n => isLikelyIdle(idleCheck(n)))).toEqual([false, false, false])
+})
+
+test('isLikelyIdle: no ping left', async () => {
+  expect(isLikelyIdle(idleCheck(6, 6))).toEqual(false)
+  expect(seriesValues(idleCheck(6, 6))).toEqual([])
+})
+
+test('isLikelyIdle: past the table the last value', async () => {
+  expect(isLikelyIdle(idleCheck(10, 20))).toEqual(true)
+})
+
+// A request at 20:28: the ping at 21:20 holds the cache to 22:20, all but 2 of its 52 min in the quiet hours.
+const eveningCheck = (quiet: QuietHours) => ({ lastRequestAt: at(20, 28), firstPingAt: at(21, 20), ttlMs: HOUR, pingsInRow: 0, maxPings: 6, curve: DEFAULT_RETURN_CURVE, quiet })
+
+test('isLikelyIdle: a ping whose window is mostly quiet hours does not pay', async () => {
+  expect(isLikelyIdle(eveningCheck(QUIET))).toEqual(true)
+  // The second ping, at 22:12, would fall in the quiet hours.
+  expect(seriesValues(eveningCheck(QUIET)).length).toEqual(1)
+  // 21:28 and 21:29 are outside them: f₁ = 2/52.
+  expect(Math.round((seriesValues(eveningCheck(QUIET))[0] ?? NaN) * 1e9)).toEqual(Math.round((1.9 * 0.183 * 2 / 52 - 0.1) * 1e9))
+})
+
+test('isLikelyIdle: the same ping without quiet hours pays', async () => {
+  expect(isLikelyIdle(eveningCheck({ kind: 'off' }))).toEqual(false)
+})
+
+test('lineModel: likely idle after 3 pings in a row', async () => {
+  const line = lineModel(snapshot({ isOn: true, pings: THREE }))
+  expect(line.advice).toEqual('󰔢 likely idle: stop?')
+  expect(line.tone).toEqual('keeping')
+})
+
+test('lineModel: likely idle before the first ping when its window is quiet hours', async () => {
+  const line = lineModel(snapshot({ isOn: true, lastRequestAt: at(20, 28), now: at(20, 28) }))
+  expect(line.details).toContain('󰁔 ping 21:20')
+  expect(line.advice).toEqual('󰔢 likely idle: stop?')
+})
+
+test('lineModel: no advice where the user decides or keep-warm cannot ping', async () => {
+  const advice = (fields: Partial<SessionSnapshot>) => lineModel(snapshot({ isOn: true, pings: THREE, ...fields })).advice
+  expect(advice({ isOn: false })).toEqual('')
+  expect(advice({ stopAt: START + 3 * HOUR })).toEqual('')
+  expect(advice({ isWaiting: true })).toEqual('')
+  expect(advice({ pingError: 'HTTP 400' })).toEqual('')
+  expect(advice({ ttl: API_TTL })).toEqual('')
+  expect(advice({ lastRequestAt: START, now: START + 61 * MINUTE })).toEqual('')
+  expect(advice({ maxPings: 3 })).toEqual('')
+  expect(advice({ lastRequestAt: at(20, 38), now: at(20, 38) })).toEqual('')
+  expect(advice({ pings: THREE.slice(0, 2) })).toEqual('')
+})
+
+test('parseReturnCurve: a list of 1 to 20 numbers from 0 to 1', async () => {
+  expect(parseReturnCurve([0.5])).toEqual([0.5])
+  expect(parseReturnCurve([0, 1])).toEqual([0, 1])
+  const twenty = Array(20).fill(0.1)
+  expect(parseReturnCurve(twenty)).toEqual(twenty)
+})
+
+test('parseReturnCurve: anything else is the default curve', async () => {
+  const unreadable = [undefined, 'x', [], Array(21).fill(0.1), [0.2, 1.5], [0.2, -0.1], [NaN], [0.2, '0.3']]
+  for (const value of unreadable) expect(parseReturnCurve(value)).toEqual(DEFAULT_RETURN_CURVE)
+})
+
+test('lineModel: a curve whose 4th ping pays keeps quiet at n = 3', async () => {
+  const line = lineModel(snapshot({ isOn: true, pings: THREE, returnCurve: [0.183, 0.110, 0.063, 0.2] }))
+  expect(line.advice).toEqual('')
 })

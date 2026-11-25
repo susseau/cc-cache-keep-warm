@@ -2,6 +2,7 @@ import type { EngineInterface } from 'claude-code'
 
 import type { KeepWarmSaved, KeepWarmTtl } from '../types'
 import { HOUR_MS } from './cache-timing'
+import { parseReturnCurve } from './idle-advice'
 import { NO_SAVINGS } from './savings'
 import { isRestored, live, markRestored, readSnapshot, writeSession } from './state'
 
@@ -13,6 +14,9 @@ const STORE_MAX_AGE_MS = 7 * 24 * HOUR_MS
 // only with a response, so a session reopened after a relaunch would otherwise not know its
 // cache length (and could not keep it warm) until its first answer.
 const PLAN_TTL_KEY = 'plan-ttl'
+// Shared by every session; the calibration (ckw-4k7) writes it. It does not start with
+// "session:", so the weekly clean-up keeps it.
+const RETURN_CURVE_KEY = 'return-curve'
 
 export async function save($: EngineInterface) {
   if (!live.storeKey) return
@@ -31,6 +35,7 @@ export async function openSessionStore($: EngineInterface) {
   live.storeKey = STORE_PREFIX + (await $.session.id())
   const plan = (await $.store.get(PLAN_TTL_KEY)) as KeepWarmTtl | undefined
   if (plan && typeof plan.ms === 'number') live.planTtl = plan
+  live.returnCurve = parseReturnCurve(await $.store.get(RETURN_CURVE_KEY))
 }
 
 // After an app relaunch the session's values are gone; the store keeps them per session id.

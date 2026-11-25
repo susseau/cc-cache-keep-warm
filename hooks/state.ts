@@ -2,6 +2,7 @@ import type { EngineInterface, ModelUsage } from 'claude-code'
 
 import type { KeepWarmPing, KeepWarmTtl } from '../types'
 import { DEFAULT_MAX_PINGS, isCacheHit, MAX_PINGS_CAP } from './cache-timing'
+import { DEFAULT_RETURN_CURVE, type ReturnCurve } from './idle-advice'
 import { parseQuietHours, type QuietHours } from './quiet-hours'
 import { NO_SAVINGS } from './savings'
 import type { SessionSnapshot } from './session-snapshot'
@@ -39,6 +40,7 @@ const SAVINGS = { plugin: 'cache-keep-warm', key: 'savings' } as const
 // `answersWithoutPlan`: answers since the plan's windows were last seen.
 // `roomChecked`: whether this process has worked out if the visible ping fits.
 // `isFirstRequest`: the first request after a start says nothing about the cache's length.
+// `returnCurve`: the chance of a return per ping in a row, behind the line's "likely idle".
 export const live: {
   storeKey: string
   pingPendingUntil: number
@@ -56,6 +58,7 @@ export const live: {
   pingTurnId: string
   answersWithoutPlan: number
   roomChecked: boolean
+  returnCurve: ReturnCurve
 } = {
   storeKey: '',
   pingPendingUntil: 0,
@@ -73,6 +76,7 @@ export const live: {
   pingTurnId: '',
   answersWithoutPlan: 0,
   roomChecked: false,
+  returnCurve: DEFAULT_RETURN_CURVE,
 }
 
 export async function readSnapshot($: EngineInterface): Promise<SessionSnapshot> {
@@ -99,6 +103,8 @@ export async function readSnapshot($: EngineInterface): Promise<SessionSnapshot>
     lastWarmPingAt: lastWarmPing.value ?? 0,
     savings: savings.value ?? NO_SAVINGS,
     quiet: live.quiet,
+    maxPings: live.maxPings,
+    returnCurve: live.returnCurve,
   }
 }
 
