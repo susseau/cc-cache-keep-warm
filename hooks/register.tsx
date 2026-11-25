@@ -4,7 +4,7 @@ import type { Register } from 'claude-code'
 
 import { pingLimit } from './cache-timing'
 import { COMMAND, runKeepwarm } from './command'
-import { carryOnResumed, markStartedNew, replacesConversation, startOver, startSession } from './events/session'
+import { carryOnResumed, markStartedNew, replacesConversation, startCleared, startOver, startSession } from './events/session'
 import { finishRequest, startRequest } from './events/request'
 import { finishTurn } from './events/turn'
 import { switchOff, switchOn } from './keep-warm-switch'
@@ -32,12 +32,13 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  // After /clear the conversation starts over: no cache to count down yet. Its 'compact' is not
+  // After /clear, a new session, keep-warm carries over as it was and the conversation starts over:
+  // no cache to count down yet. Its 'compact' is not
   // used: it also comes when a subagent compacts its own conversation, with nothing saying so
   // (no agent_id), which reset the main countdown. session.compact says whose.
   on('classic.SessionStart', async ($, e, next) => {
     if (e.source === 'startup') await markStartedNew($)
-    else if (e.source === 'clear') await startOver($)
+    else if (e.source === 'clear') await startCleared($)
     else if ((e.source === 'resume' || e.source === 'fork') && typeof e.seconds_since_last_response === 'number') {
       await carryOnResumed($, { secondsSinceLastResponse: e.seconds_since_last_response, contextTokens: e.context_tokens })
     }

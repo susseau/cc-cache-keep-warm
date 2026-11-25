@@ -6,7 +6,7 @@ import { COMMAND } from '../command'
 import { switchOnIfNew } from '../keep-warm-switch'
 import { startTicking } from '../ping/ticking'
 import { noticeUnreadQuiet } from '../quiet-notice'
-import { forgetOldSessions, openSessionStore, restoreSaved, saveIfRestored } from '../session-store'
+import { carryOverCleared, forgetOldSessions, openSessionStore, restoreSaved, saveIfRestored } from '../session-store'
 import { live, readSnapshot, writeSession } from '../state'
 import { syncTitle } from '../title'
 
@@ -48,6 +48,13 @@ export async function carryOnResumed($: EngineInterface, { secondsSinceLastRespo
   await writeSession($, { now })
   // At a relaunch this can run before session.start has restored the saved values.
   await saveIfRestored($)
+}
+
+// After /clear: a new session, which keeps keep-warm as the cleared one had it, with a
+// conversation that starts over.
+export async function startCleared($: EngineInterface) {
+  await carryOverCleared($)
+  await startOver($)
 }
 
 // The conversation starts over (cleared, or replaced by its summary): nothing of it is cached

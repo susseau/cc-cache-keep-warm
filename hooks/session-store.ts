@@ -21,7 +21,7 @@ export async function save($: EngineInterface) {
   await $.store.set(live.storeKey, saved)
 }
 
-// Saves only once session.start has restored: before that, it would write the defaults
+// Saves only once the session's values are restored: before that, it would write the defaults
 // (keep-warm off) over the saved values.
 export async function saveIfRestored($: EngineInterface) {
   if (await isRestored($)) await save($)
@@ -39,22 +39,39 @@ export async function openSessionStore($: EngineInterface) {
 // Runs once per process; a reload of the module keeps $.state and needs nothing back.
 export async function restoreSaved($: EngineInterface) {
   if (await isRestored($)) return false
-  const saved = (await $.store.get(live.storeKey)) as KeepWarmSaved | undefined
-  if (saved) {
-    if (saved.ttl && typeof saved.ttl.ms === 'number') live.savedTtl = saved.ttl
-    const { lastRequestAt: last } = await readSnapshot($)
-    if (saved.lastRequestAt > last) await writeSession($, { lastRequestAt: saved.lastRequestAt })
-    await writeSession($, {
-      isOn: saved.keepWarm,
-      stopAt: saved.stopAt ?? 0,
-      lastRealRequestAt: saved.lastRealRequestAt ?? 0,
-      lastWarmPingAt: saved.lastWarmPingAt ?? 0,
-      savings: saved.savings ?? NO_SAVINGS,
-    })
-  } else live.isUnseen = true
+  const saved = await readSaved($)
+  if (saved) await applySaved($, saved)
+  else live.isUnseen = true
   await markRestored($)
   await save($)
   return true
+}
+
+// /clear ends the session and opens a new one in the same process, under a new id and with an
+// empty $.state (no session.start comes): the new one takes the cleared one's saved values over
+// (the switch, its stop time, what keep-warm cost and saved) and keeps them under its own id.
+export async function carryOverCleared($: EngineInterface) {
+  const saved = await readSaved($)
+  await openSessionStore($)
+  if (saved) await applySaved($, saved)
+  await markRestored($)
+}
+
+async function readSaved($: EngineInterface) {
+  return (await $.store.get(live.storeKey)) as KeepWarmSaved | undefined
+}
+
+async function applySaved($: EngineInterface, saved: KeepWarmSaved) {
+  if (saved.ttl && typeof saved.ttl.ms === 'number') live.savedTtl = saved.ttl
+  const { lastRequestAt: last } = await readSnapshot($)
+  if (saved.lastRequestAt > last) await writeSession($, { lastRequestAt: saved.lastRequestAt })
+  await writeSession($, {
+    isOn: saved.keepWarm,
+    stopAt: saved.stopAt ?? 0,
+    lastRealRequestAt: saved.lastRealRequestAt ?? 0,
+    lastWarmPingAt: saved.lastWarmPingAt ?? 0,
+    savings: saved.savings ?? NO_SAVINGS,
+  })
 }
 
 // Forget sessions untouched for a week so the store stays small.

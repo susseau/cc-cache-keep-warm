@@ -27,6 +27,7 @@ export type Engine = {
   title: string | undefined
   titles: string[]
   store: Record<string, unknown>
+  sessionId: string
   nextUsage?: Usage
 }
 
@@ -43,6 +44,7 @@ export function stubEngine(on: any, { env = {}, store = {} }: { env?: Record<str
     title: undefined,
     titles: [],
     store: { ...store },
+    sessionId: 'S1',
   }
   const clock = mock.clock(on, { now: START })
   mock.env(on, env)
@@ -57,7 +59,8 @@ export function stubEngine(on: any, { env = {}, store = {} }: { env?: Record<str
   })
   on('store.keys', () => ({ value: Object.keys(engine.store) }))
   on('session.start', (_$: any, e: any) => ({ cwd: e.cwd }))
-  on('session.id', () => ({ value: 'S1' }))
+  on('session.id', () => ({ value: engine.sessionId }))
+  on('session.end', (_$: any, e: any) => ({ sessionId: e.sessionId }))
   on('settings.read', () => ({ value: {} }))
   on('session.usage', (_$: any, e: any) => ({
     value: {
@@ -119,6 +122,32 @@ export async function answer($: any, engine: Engine, usage: Usage = WRITE, field
     ...fields,
   })
   return turnId
+}
+
+// The session id /clear moves to.
+export const CLEARED_ID = 'S2'
+
+// A stub engine whose $.state belongs to one session, as Claude Code's does: after /clear the
+// new session starts with an empty one. Only for the /clear tests: answering $.state here slows
+// every check down, too much for the longest test.
+export function stubClearableEngine(on: any) {
+  const stub = stubEngine(on)
+  const stateBySession: Record<string, Record<string, unknown>> = {}
+  const sessionState = () => (stateBySession[stub.engine.sessionId] ??= {})
+  on('state.get', (_$: any, e: any) => ({ value: { value: sessionState()[e.key] } }))
+  on('state.set', (_$: any, e: any) => {
+    sessionState()[e.key] = e.value
+    return { value: undefined }
+  })
+  return stub
+}
+
+// /clear as Claude Code 2.1.332 runs it (seen live, 2026-11-25): the session ends, then a new one
+// under a new id, with an empty $.state, gets the SessionStart hook only, no session.start.
+export async function clear($: any, engine: Engine) {
+  await $.session.end({ reason: 'clear', sessionId: engine.sessionId })
+  engine.sessionId = CLEARED_ID
+  await $.classic.SessionStart({ session_id: CLEARED_ID, transcript_path: '/t', cwd: '/work', hook_event_name: 'SessionStart', source: 'clear' })
 }
 
 export async function start($: any) {
