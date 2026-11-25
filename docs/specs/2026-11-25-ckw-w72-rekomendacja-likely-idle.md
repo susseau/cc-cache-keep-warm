@@ -60,7 +60,8 @@ dokłada i-ty ping serii, pod warunkiem braku powrotu wcześniej. Domyślna, z k
 Ping o numerze większym niż N dostaje `h[N]`.
 
 Nadpisanie: `$.store` pod kluczem `return-curve`, wartość to tablica od 1 do 20 skończonych liczb
-od 0 do 1. Mod czyta ją przy starcie sesji (`session.start`); brak klucza albo każda inna
+od 0 do 1. Mod czyta ją przy otwarciu sesji, tam gdzie `plan-ttl` (`openSessionStore`: po
+`session.start` i po `/clear` w `carryOverCleared`), do zmiennej modułu; brak klucza albo każda inna
 wartość oznacza krzywą domyślną, bez komunikatu. Klucz nie należy do sesji, więc tygodniowe
 sprzątanie `session:` go nie usuwa.
 
@@ -83,14 +84,16 @@ Dane: ostatni request `L`, długość cache `T`, pingi w serii `n` (`pings.lengt
 - Rekomendacja „likely idle”, gdy `K ≥ 1` i `EV(k) ≤ 0` dla każdego `k = 1..K`.
 
 Przykłady z domyślną krzywą, bez ciszy: `n = 0..2` → opłaca się (`EV(1)` dla `n = 2`: 1.9·0.063 − 0.1 > 0);
-`n = 3` → likely idle. Przy ciszy od 21:30 ping o 21:20 do cache wygasającego 21:28 dokłada okno
-z 2 minutami poza ciszą (`f₁ = 2/52`) → likely idle.
+`n = 3` → likely idle. Przy ciszy od 21:30 (`T = 60 min`, ostatni request 20:28, `E₀ = 21:28`)
+ping o 21:20 daje `E₁ = 22:20`, okno `(21:28, 22:20]` ma 52 min, z nich 2 poza ciszą
+(`f₁ = 2/52`) → likely idle.
 
 ### Kiedy linia pokazuje detal
 
 Detal `󰔢 likely idle: stop?` stoi na linii, gdy wszystkie warunki są spełnione:
 
-- keep-warm włączony i trzyma cache (ton `keeping`), cache ciepły;
+- keep-warm włączony i trzyma cache (ton `keeping`), cache ciepły; ton `keeping` wymaga już cache
+  co najmniej 30 min (`isLongEnoughToKeepWarm`), więc krótki cache detalu nie ma;
 - brak stop time (`stopAt = 0`): użytkownik sam wyznaczył koniec;
 - linia zapowiada ping (`󰁔 ping HH:MM`), nie „no ping: quiet hours” ani brak pingu;
 - sesja nie czeka na odpowiedź użytkownika (`waiting for your answer`);
@@ -135,7 +138,8 @@ engine.
 - Brak rekomendacji przy oczekiwaniu na odpowiedź — powrót jest wtedy prawie pewny (krytyka podejścia).
 - Seria kończy się na pierwszym pingu w ciszy — tak działa `decidePing`, cache wtedy wygasa (krytyka podejścia).
 - Bez progu rozmiaru kontekstu — decyzja jest względna, próg to parametr bez danych.
-- Krzywa czytana raz przy starcie sesji, zła wartość cicho daje domyślną — jak `plan-ttl`; ckw-4k7 sprawdzi zapis.
+- Bez osobnego warunku „przed pierwszym pingiem bez `lastRealRequestAt`” (z notatek ticketu) — rachunek bierze `L = lastRequestAt` i `n = pings.length`, nie `lastRealRequestAt`; przy `n = 0` domyślna krzywa daje „likely idle” tylko przez ciszę nocną, a tę KA-3 chce pokazać.
+- Krzywa czytana raz przy otwarciu sesji (też po `/clear`), zła wartość cicho daje domyślną — jak `plan-ttl`; ckw-4k7 sprawdzi zapis.
 - Detal ostatni przed czasem — najbliżej przycisku Stop i ostatni ucinany w wąskim oknie.
 
 ## Do rozstrzygnięcia w planie
