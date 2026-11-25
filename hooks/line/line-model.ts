@@ -1,7 +1,7 @@
 // What the line above the prompt says, decided from the session's values alone.
 import { HOUR_MS, isLongEnoughToKeepWarm, MINUTE_MS } from '../cache-timing'
 import { cacheLength, clockOfDay, clockTime, minutes, timeLeft, tokens } from '../format'
-import { isHeldByQuiet, isIdleInPingWindow, pingWindowOpensAfter } from '../ping/decide-ping'
+import { isHeldByQuiet, isIdleInPingWindow, isPastStopTime, pingWindowOpensAfter } from '../ping/decide-ping'
 import type { QuietHours } from '../quiet-hours'
 import { netSaving } from '../savings'
 import { needsVisiblePing, type SessionSnapshot } from '../session-snapshot'
@@ -86,7 +86,7 @@ function pingOutlookOf(session: SessionSnapshot, { ttlMs }: Countdown): PingOutl
 function checksInPingWindow({ lastRequestAt, now, stopAt }: SessionSnapshot, ttlMs: number) {
   const checks: number[] = []
   let check = Math.ceil(Math.max(lastRequestAt + pingWindowOpensAfter(ttlMs), now) / MINUTE_MS) * MINUTE_MS
-  while (isIdleInPingWindow(check - lastRequestAt, ttlMs) && (stopAt === 0 || check < stopAt)) {
+  while (isIdleInPingWindow(check - lastRequestAt, ttlMs) && !isPastStopTime(check, stopAt)) {
     checks.push(check)
     check += MINUTE_MS
   }

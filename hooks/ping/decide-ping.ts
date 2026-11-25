@@ -50,7 +50,7 @@ export type PingStep = 'none' | 'stop-at-time' | 'stop-after-max' | 'quiet' | 'p
 
 // One check of a session with keep-warm on. A stop time overrides the quiet hours.
 export function decidePing(check: PingCheck): PingStep {
-  if (check.stopAt > 0 && check.now >= check.stopAt) return 'stop-at-time'
+  if (isPastStopTime(check.now, check.stopAt)) return 'stop-at-time'
   if (!isInPingWindow(check) || check.now < check.pendingUntil) return 'none'
   if (isHeldByQuiet(check.now, check.stopAt, check.quiet)) return 'quiet'
   if (check.stopAt === 0 && check.pingsInRow >= check.maxPings) return 'stop-after-max'
@@ -72,6 +72,11 @@ export function isIdleInPingWindow(idleMs: number, ttlMs: number) {
 // How long after the last request the ping window opens.
 export function pingWindowOpensAfter(ttlMs: number) {
   return ttlMs - PING_LEAD_MS
+}
+
+// Keep-warm switches itself off at the stop time, if one was given.
+export function isPastStopTime(at: number, stopAt: number) {
+  return stopAt > 0 && at >= stopAt
 }
 
 // No ping at this moment: it falls in the quiet hours and no stop time overrides them.
