@@ -94,7 +94,7 @@ Plik `tests/decisions.test.ts`; helper `snapshot` (`tests/decisions.test.ts:169-
 Plik `tests/line.test.ts` (import `keepwarm` z `./engine`):
 
 - `likely idle after 3 pings in a row, until Stop` — `stubEngine`, `start`, `answer(WRITE)`, `keepwarm('on')`, 2× `clock.advance(52 * MINUTE)`: linia nie zawiera `likely idle`; trzeci `advance(52 * MINUTE)`: linia zawiera `'54k cached·󰔢 likely idle: stop?·'`; `advance(10 * MINUTE)`: nadal zawiera, `keepwarm('status')` zaczyna się od `Keep-warm on`; `pressToggle`: linia nie zawiera `likely idle`.
-- `likely idle in mustard` (spec, „Testy”; KA-2) — ten sam przebieg do trzeciego `advance`, potem z `$.ui.mount` (jak `line` w `tests/engine.ts:157-160`) znajdź element z tekstem `󰔢 likely idle: stop?` i sprawdź jego `color` = `'#b5a55f'`. Najpierw ustal w `.claude-plugin/types/claude-code/index.d.ts` (piszę go Claude Code przy ładowaniu moda) albo w skillu `plugin-authoring`, czy uchwyt z `ui.mount` / `ui.find` oddaje właściwości `Text`. Jeśli nie oddaje, pomiń ten test i dopisz do planu sekcję `## Odstępstwa`: kolor rady sprawdzany tylko ręcznie w „Po wydaniu”, z cytatem z typów pokazującym brak dostępu do właściwości.
+- `likely idle in mustard` (spec, „Testy”; KA-2) — ten sam przebieg do trzeciego `advance`, potem `const ui = await $.ui.mount(...)` (argumenty jak `line` w `tests/engine.ts:157-160`), `(await ui.findAll({ type: 'Text' })).find(t => t.text === '󰔢 likely idle: stop?')`: element istnieje i jego `props.color` = `'#b5a55f'`. Kit oddaje węzły jako `{ type, props, text, children }` (sprawdzone próbą 2026-11-25: `props: { dimColor: true }` detalu); filtra po `props` w `find` nie używaj, filtruj wynik `findAll`.
 
 - [ ] **Krok 2: Uruchom, potwierdź fail**
 
@@ -305,4 +305,4 @@ git add hooks/idle-advice.ts hooks/session-store.ts types/index.d.ts tests/decis
 
 ## Po wydaniu
 
-- Sprawdź detal w prawdziwej linii aplikacji desktop: glif `󰔢` i musztarda `#b5a55f` (glify i odstępy w aplikacji wyglądają inaczej niż w teście; kolor sprawdza test z Task 1, o ile kit go oddaje).
+- Sprawdź detal w prawdziwej linii aplikacji desktop: glif `󰔢` i odstępy (aplikacja rysuje je inaczej niż kit testów; kolor sprawdza test `likely idle in mustard` z Task 1).
