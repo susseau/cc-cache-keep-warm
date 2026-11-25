@@ -39,7 +39,7 @@ export async function openSessionStore($: EngineInterface) {
 // Runs once per process; a reload of the module keeps $.state and needs nothing back.
 export async function restoreSaved($: EngineInterface) {
   if (await isRestored($)) return false
-  const saved = await readSaved($)
+  const saved = await readSaved($, live.storeKey)
   if (saved) await applySaved($, saved)
   else live.isUnseen = true
   await markRestored($)
@@ -51,14 +51,15 @@ export async function restoreSaved($: EngineInterface) {
 // empty $.state (no session.start comes): the new one takes the cleared one's saved values over
 // (the switch, its stop time, what keep-warm cost and saved) and keeps them under its own id.
 export async function carryOverCleared($: EngineInterface) {
-  const saved = await readSaved($)
+  const clearedKey = live.storeKey
   await openSessionStore($)
+  const saved = await readSaved($, clearedKey)
   if (saved) await applySaved($, saved)
   await markRestored($)
 }
 
-async function readSaved($: EngineInterface) {
-  return (await $.store.get(live.storeKey)) as KeepWarmSaved | undefined
+async function readSaved($: EngineInterface, key: string) {
+  return (await $.store.get(key)) as KeepWarmSaved | undefined
 }
 
 async function applySaved($: EngineInterface, saved: KeepWarmSaved) {

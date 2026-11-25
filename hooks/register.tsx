@@ -32,10 +32,10 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  // After /clear, a new session, keep-warm carries over as it was and the conversation starts over:
-  // no cache to count down yet. Its 'compact' is not
-  // used: it also comes when a subagent compacts its own conversation, with nothing saying so
-  // (no agent_id), which reset the main countdown. session.compact says whose.
+  // After /clear, a new session: keep-warm carries over as it was and the conversation starts over
+  // (no cache to count down yet). Its 'compact' is not used: it also comes when a subagent compacts
+  // its own conversation, with nothing saying so (no agent_id), which reset the main countdown.
+  // session.compact says whose.
   on('classic.SessionStart', async ($, e, next) => {
     if (e.source === 'startup') await markStartedNew($)
     else if (e.source === 'clear') await startCleared($)
