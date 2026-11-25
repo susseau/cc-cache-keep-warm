@@ -74,7 +74,7 @@ test kit `claude plugin test` (`claude-code/testing`).
 
 **Reguły stosowalne:**
 
-- `tdd-test-na-blad` — Kroki 1-2 reprodukują błąd: 4 testy `/clear` failują na obecnym kodzie.
+- `tdd-test-na-blad` — Kroki 1-2 reprodukują błąd: 5 testów `/clear` failuje na obecnym kodzie.
 - `pokayoke-przyczyna` — poprawka u źródła: nowa sesja po `/clear` dostaje klucz store i stan
   odtworzony, a nie łatka na samym włączniku w linii.
 - `dry-drugie-wystapienie` — przejęcie wpisu ze store występuje drugi raz, więc `restoreSaved`
@@ -223,9 +223,10 @@ test('a return after /clear is no saved return: the ping warmed the conversation
 claude plugin test .
 ```
 
-Oczekiwany output: `77 pass`, `4 fail`: `/clear keeps keep-warm on: ...` (linia
+Oczekiwany output: `77 pass`, `5 fail`: `/clear keeps keep-warm on: ...` (linia
 `󰔟 expires 11:00·54k cached·59 min left•••••• 󰐊 Warm` ze spacją na końcu), `/clear carries the stop time over, ...`
-(`Received: undefined`), `/clear keeps what keep-warm saved this session` i
+(`Received: undefined`), `/clear with keep-warm on never pings ...` (linia z `󰐊 Warm` zamiast
+`󰓛 Stop`), `/clear keeps what keep-warm saved this session` i
 `a return after /clear is no saved return: ...` (linia bez `󰆼 cost 5k`).
 
 - [ ] **Krok 3: Zaimplementuj minimalnie**
@@ -293,10 +294,33 @@ export async function startCleared($: EngineInterface) {
 `startOver` zapisuje przez `saveIfRestored`, więc wpis trafia pod nowy klucz dopiero po
 `carryOverCleared` (który ustawia klucz i flagę `restored`).
 
+Flagę `restored` ustawia teraz też `/clear`, więc popraw komentarze, które mówią tylko
+o `session.start`. W `hooks/state.ts` komentarz nad `isRestored` na:
+
+```ts
+// Whether this session's saved values are restored (session.start, or carried over after /clear).
+```
+
+W `hooks/session-store.ts` dwie linie komentarza nad `saveIfRestored` na:
+
+```ts
+// Saves only once the session's values are restored: before that, it would write the defaults
+// (keep-warm off) over the saved values.
+```
+
 W `hooks/register.tsx` zamień import z `./events/session` na:
 
 ```ts
 import { carryOnResumed, markStartedNew, replacesConversation, startCleared, startOver, startSession } from './events/session'
+```
+
+pierwszą linię komentarza nad `on('classic.SessionStart', ...)`
+(`// After /clear the conversation starts over: no cache to count down yet. Its 'compact' is not`) na
+dwie:
+
+```ts
+  // After /clear, a new session, keep-warm carries over as it was and the conversation starts over:
+  // no cache to count down yet. Its 'compact' is not
 ```
 
 i linię `else if (e.source === 'clear') await startOver($)` na:
@@ -338,11 +362,11 @@ claude plugin test . &&
   claude plugin validate --strict ./.claude-plugin/plugin.json
 ```
 
-Oczekiwany output: `81 pass`, `0 fail`; `✔ Validation passed`.
+Oczekiwany output: `82 pass`, `0 fail`; `✔ Validation passed`.
 
 - [ ] **Krok 5: Commit**
 
 ```bash
-git add hooks/session-store.ts hooks/events/session.ts hooks/register.tsx tests/engine.ts tests/keep-warm.test.ts README.md .claude/CLAUDE.md &&
+git add hooks/session-store.ts hooks/state.ts hooks/events/session.ts hooks/register.tsx tests/engine.ts tests/keep-warm.test.ts README.md .claude/CLAUDE.md &&
   git commit -m "fix(ckw-o6j): /clear nie wyłącza keep-warm"
 ```
