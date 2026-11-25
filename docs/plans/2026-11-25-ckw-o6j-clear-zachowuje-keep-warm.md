@@ -51,7 +51,7 @@ test kit `claude plugin test` (`claude-code/testing`).
 - Zmodyfikuj: `hooks/events/session.ts:9`, `hooks/events/session.ts:53`
 - Zmodyfikuj: `hooks/register.tsx:7`, `hooks/register.tsx:35`, `hooks/register.tsx:40`
 - Zmodyfikuj: `README.md:239`
-- Zmodyfikuj: `.claude/CLAUDE.md:12`, `.claude/CLAUDE.md:57`, sekcja „Behaviour agreed with the
+- Zmodyfikuj: `.claude/CLAUDE.md:12`, `.claude/CLAUDE.md:57`, `.claude/CLAUDE.md:68`, sekcja „Behaviour agreed with the
   owner”
 - Test: `tests/keep-warm.test.ts`
 
@@ -347,6 +347,13 @@ W `.claude/CLAUDE.md`:
 
 ```markdown
 - `/clear` is a new session (probe in the live app, 2026-11-25, Claude Code 2.1.332): `session.end` `reason: 'clear'` under the old id, then `classic.SessionStart` `source: 'clear'` under a new id with an empty `$.state`; no `session.start` comes, the module's variables and timers stay (`live.storeKey` still names the old session). Until ckw-o6j keep-warm read as off after it, and the new session saved over the old one's store entry. Since then `carryOverCleared` takes the old entry's switch, stop time, cache length and account over under the new id, then the countdown starts over. The tests model it with `stubClearableEngine` and `clear()` (`tests/engine.ts`); only the `/clear` tests use it: answering `$.state` in the stub slows every check, too much for the 6-pings test.
+```
+
+- w linii 68 (weekly store clean-up) ostatnie zdanie (zaczyna się od
+  `The classic.SessionStart hook never saves before`) na:
+
+```markdown
+The classic.SessionStart hook never saves before the session's values are restored (by `session.start`, or carried over after `/clear`): it could write the defaults over the saved switch.
 ```
 
 - na końcu sekcji „Behaviour agreed with the owner” nowy punkt:
