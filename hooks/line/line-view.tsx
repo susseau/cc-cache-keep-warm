@@ -41,8 +41,7 @@ export function drawLine(components: LineComponents, model: LineModel, onToggle:
       <Box flexShrink={1} minWidth={0} overflow="hidden" flexWrap="nowrap" alignItems="center" columnGap={PART_GAP}>
         {model.details.flatMap(detail => [dim(detail), dim('·')])}
       </Box>
-      {model.advice ? <Box flexShrink={0}><Text color={TONE_COLORS.stalled}>{model.advice}</Text></Box> : null}
-      {model.advice ? dim('·') : null}
+      {model.advice ? <><Box flexShrink={0}><Text color={TONE_COLORS.stalled}>{model.advice}</Text></Box>{dim('·')}</> : null}
       <Box flexShrink={0}><Text>{model.main}</Text></Box>
       <Box flexShrink={0}>
         {color ? <Text color={color}>{BAR_FULL.repeat(model.filledCells)}</Text> : <Text dimColor>{BAR_FULL.repeat(model.filledCells)}</Text>}

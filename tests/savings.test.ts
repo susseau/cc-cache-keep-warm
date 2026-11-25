@@ -69,14 +69,14 @@ test('lineModel: no account before the first ping', async () => {
 
 test('statusText: pings, saved returns, cost and a net saving', async () => {
   const savings = { pings: 3, pingCost: 15_105, returns: 1, saved: 95_000 }
-  expect(statusText(snapshot({ savings }), 8).split('\n')).toContain('This session: 3 pings cost 15k, 1 return to a warm cache saved 95k: 80k saved (input-token equivalents).')
+  expect(statusText(snapshot({ savings })).split('\n')).toContain('This session: 3 pings cost 15k, 1 return to a warm cache saved 95k: 80k saved (input-token equivalents).')
 })
 
 test('statusText: pings not paid back yet are spent', async () => {
   const savings = { pings: 1, pingCost: 5_035, returns: 0, saved: 0 }
-  expect(statusText(snapshot({ savings }), 8).split('\n')).toContain('This session: 1 ping cost 5k, 0 returns to a warm cache saved 0k: 5k spent (input-token equivalents).')
+  expect(statusText(snapshot({ savings })).split('\n')).toContain('This session: 1 ping cost 5k, 0 returns to a warm cache saved 0k: 5k spent (input-token equivalents).')
 })
 
 test('statusText: no account before the first ping', async () => {
-  expect(statusText(snapshot({}), 8)).not.toContain('This session:')
+  expect(statusText(snapshot({}))).not.toContain('This session:')
 })

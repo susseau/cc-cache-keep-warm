@@ -176,9 +176,9 @@ const snapshot = (fields: Partial<SessionSnapshot> = {}): SessionSnapshot => ({
 
 test('statusText: on, its ping history and a short cache', async () => {
   const on = snapshot({ isOn: true, pings: [{ at: START, isHit: true, read: 54_000 }, { at: START + HOUR, isHit: false, read: 0 }] })
-  expect(statusText(on, 6).split('\n')[0]).toContain('(stops itself after 6 pings in a row)')
-  expect(statusText(on, 6).split('\n').slice(-2)).toEqual(['10:00 · read 54k from cache', '11:00 · found the cache cold'])
-  expect(statusText(snapshot({ ttl: API_TTL }), 6).split('\n')).toContain('Keep-warm only pings a cache of 30 min or longer.')
+  expect(statusText(on).split('\n')[0]).toContain('(stops itself after 6 pings in a row)')
+  expect(statusText(on).split('\n').slice(-2)).toEqual(['10:00 · read 54k from cache', '11:00 · found the cache cold'])
+  expect(statusText(snapshot({ ttl: API_TTL })).split('\n')).toContain('Keep-warm only pings a cache of 30 min or longer.')
 })
 
 test('lineModel: keeping while on and able to ping, stalled while on and not, off while off', async () => {
@@ -241,12 +241,12 @@ test('lineModel: no ping is announced after the stop time', async () => {
 })
 
 test('statusText: the quiet hours while keep-warm is on', async () => {
-  const lines = (quiet: QuietHours) => statusText(snapshot({ isOn: true, quiet }), 6).split('\n')
+  const lines = (quiet: QuietHours) => statusText(snapshot({ isOn: true, quiet })).split('\n')
   expect(lines(QUIET)[1]).toEqual('Quiet hours 21:30–08:00: no pings then (a stop time overrides them).')
   expect(lines({ kind: 'off' })[1]).toEqual('Quiet hours: off.')
   expect(lines({ kind: 'invalid', setting: 'range', text: 'nights' })[1]).toEqual('Quiet hours range "nights" not understood (use HH:MM-HH:MM); keep-warm will not ping without a stop time until it is fixed.')
   expect(lines({ kind: 'invalid', setting: 'switch', text: 'yes' })[1]).toEqual('Quiet hours setting "yes" not understood (use true or false); keep-warm will not ping without a stop time until it is fixed.')
-  expect(statusText(snapshot({}), 6)).not.toContain('Quiet hours')
+  expect(statusText(snapshot({}))).not.toContain('Quiet hours')
 })
 
 // Three warm pings in a row, 52 min apart, after the request at 10:00.

@@ -1,7 +1,7 @@
 // Whether further pings are likely to pay for themselves: pure, over the session's pings in a row
 // and the chance the person comes back. Advice for the line only: keep-warm never stops by it.
-import { MINUTE_MS, PING_LEAD_MS } from './cache-timing'
-import { isQuiet } from './ping/decide-ping'
+import { MAX_PINGS_CAP, MINUTE_MS, PING_LEAD_MS } from './cache-timing'
+import { isQuiet, pingWindowOpensAfter } from './ping/decide-ping'
 import type { QuietHours } from './quiet-hours'
 import { HOUR_WRITE_PRICE, READ_PRICE } from './savings'
 
@@ -12,11 +12,9 @@ export type ReturnCurve = readonly number[]
 // From the calibration of 2026-11-16: 997 breaks longer than 52 min over 10.7 weeks.
 export const DEFAULT_RETURN_CURVE: ReturnCurve = [0.183, 0.110, 0.063, 0.040, 0.037, 0.023, 0.012, 0.002]
 
-const MAX_CURVE_LENGTH = 20
-
 // A curve read from the store: 1 to 20 numbers from 0 to 1, or the default for anything else.
 export function parseReturnCurve(value: unknown): ReturnCurve {
-  const isCurve = Array.isArray(value) && value.length >= 1 && value.length <= MAX_CURVE_LENGTH &&
+  const isCurve = Array.isArray(value) && value.length >= 1 && value.length <= MAX_PINGS_CAP &&
     value.every(chance => typeof chance === 'number' && Number.isFinite(chance) && chance >= 0 && chance <= 1)
   return isCurve ? value : DEFAULT_RETURN_CURVE
 }
@@ -44,7 +42,7 @@ export function seriesValues({ lastRequestAt, firstPingAt, ttlMs, pingsInRow, ma
   const values: number[] = []
   let stayed = 1, cost = 0
   for (let j = 1; j <= maxPings - pingsInRow; j++) {
-    const pingAt = firstPingAt + (j - 1) * (ttlMs - PING_LEAD_MS)
+    const pingAt = firstPingAt + (j - 1) * pingWindowOpensAfter(ttlMs)
     if (j >= 2 && isQuiet(pingAt, quiet)) break
     const windowStart = j === 1 ? lastRequestAt + ttlMs : pingAt + PING_LEAD_MS
     cost += READ_PRICE * stayed
@@ -60,13 +58,13 @@ function hazard(curve: ReturnCurve, i: number) {
   return curve[Math.min(i, curve.length) - 1] ?? 0
 }
 
-// The share of the full minutes in (from, to], counted from `from`, that fall outside the quiet
-// hours: no one comes back in them.
+// The share of the full minutes in (from, to], counted from `from` and each read at its start,
+// that fall outside the quiet hours: no one comes back in them.
 function awakeShare(from: number, to: number, quiet: QuietHours) {
   if (quiet.kind === 'off') return 1
   const minutes = Math.floor((to - from) / MINUTE_MS)
   let awake = 0
-  for (let i = 1; i <= minutes; i++) {
+  for (let i = 0; i < minutes; i++) {
     if (!isQuiet(from + i * MINUTE_MS, quiet)) awake++
   }
   return awake / minutes
