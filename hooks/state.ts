@@ -122,7 +122,7 @@ export async function writeSession($: EngineInterface, patch: Partial<SessionSna
   if (patch.savings !== undefined) await $.state.set(SAVINGS, patch.savings)
 }
 
-// Whether session.start has restored the saved values in this process.
+// Whether this session's saved values are restored (session.start, or carried over after /clear).
 export async function isRestored($: EngineInterface) {
   const { value: restored = false } = await $.state.get(RESTORED)
   return restored

@@ -2,7 +2,7 @@
 // Run (from the repo root): claude plugin test
 import { expect, test } from 'claude-code/testing'
 
-import { answer, keepwarm, line, MINUTE, NO_USAGE, READ, START, start, stubEngine, WRITE } from './engine'
+import { answer, clear, CLEARED_ID, keepwarm, line, MINUTE, NO_USAGE, READ, START, start, stubClearableEngine, stubEngine, WRITE } from './engine'
 
 // A session saved 10 min ago with keep-warm on: after a relaunch its first ping is the visible one.
 const SAVED_ON = { lastRequestAt: START - 10 * MINUTE, keepWarm: true, stopAt: 0, ttl: { ms: 60 * MINUTE, reason: 'subscription' }, savedAt: START - 10 * MINUTE }
@@ -187,12 +187,46 @@ test('a stop time ends keep-warm', async ($, on) => {
 })
 
 test('/clear starts the countdown over', async ($, on) => {
-  const { engine, clock } = stubEngine(on)
+  const { engine, clock } = stubClearableEngine(on)
   await start($)
   await answer($, engine, WRITE)
   await clock.advance(MINUTE)
-  await $.classic.SessionStart({ session_id: 'S1', transcript_path: '/t', cwd: '/work', hook_event_name: 'SessionStart', source: 'clear' } as any)
+  await clear($, engine)
   expect(await line($)).toEqual('nothing cached yet······ 󰐊 Warm ')
+})
+
+test('/clear keeps keep-warm on: the next answer starts its countdown', async ($, on) => {
+  const { engine, clock } = stubClearableEngine(on)
+  await start($)
+  await answer($, engine, WRITE)
+  await keepwarm($, 'on')
+  await clear($, engine)
+  await answer($, engine, WRITE)
+  await clock.advance(MINUTE)
+  expect(await line($)).toEqual('󰁔 ping 10:52·54k cached·59 min left•••••• 󰓛 Stop ')
+})
+
+test('/clear carries the stop time over, under the new session\'s own store entry', async ($, on) => {
+  const { engine } = stubClearableEngine(on)
+  await start($)
+  await answer($, engine, WRITE)
+  await keepwarm($, '3h')
+  await clear($, engine)
+  await answer($, engine, WRITE)
+  expect(engine.store[`session:${CLEARED_ID}`]).toMatchObject({ keepWarm: true, stopAt: START + 3 * 60 * MINUTE, lastRequestAt: START })
+  expect(engine.store['session:S1']).toMatchObject({ keepWarm: true, lastRequestAt: START })
+})
+
+test('/clear with keep-warm on never pings the cleared, cold conversation', async ($, on) => {
+  const { engine, clock } = stubClearableEngine(on)
+  await start($)
+  await answer($, engine, WRITE)
+  await keepwarm($, 'on')
+  await clear($, engine)
+  await clock.advance(70 * MINUTE)
+  expect(engine.forks).toBe(0)
+  expect(engine.submitted).toEqual([])
+  expect(await line($)).toEqual('nothing cached yet······ 󰓛 Stop ')
 })
 
 test('the main conversation\'s compaction starts over; a subagent\'s does not', async ($, on) => {
@@ -256,22 +290,22 @@ test('a return after the visible ping counts as saved; the visible ping itself i
 })
 
 test('/clear keeps what keep-warm saved this session', async ($, on) => {
-  const { engine, clock } = stubEngine(on)
+  const { engine, clock } = stubClearableEngine(on)
   await start($)
   await answer($, engine, WRITE)
   await keepwarm($, 'on')
   await clock.advance(52 * MINUTE)
-  await $.classic.SessionStart({ session_id: 'S1', transcript_path: '/t', cwd: '/work', hook_event_name: 'SessionStart', source: 'clear' } as any)
+  await clear($, engine)
   expect(await line($)).toContain('󰆼 cost 5k')
 })
 
 test('a return after /clear is no saved return: the ping warmed the conversation before it', async ($, on) => {
-  const { engine, clock } = stubEngine(on)
+  const { engine, clock } = stubClearableEngine(on)
   await start($)
   await answer($, engine, WRITE)
   await keepwarm($, 'on')
   await clock.advance(70 * MINUTE)
-  await $.classic.SessionStart({ session_id: 'S1', transcript_path: '/t', cwd: '/work', hook_event_name: 'SessionStart', source: 'clear' } as any)
+  await clear($, engine)
   await answer($, engine, READ)
   expect(await line($)).toContain('󰆼 cost 5k')
 })
