@@ -6,7 +6,7 @@
 
 **Stack:** TypeScript, mod API Claude Code (`claude-code`, `claude-code/testing`), `claude plugin test`.
 
-**Spec:** `docs/specs/2026-11-25-ckw-w72-rekomendacja-likely-idle.md`
+**Spec:** `docs/archive/specs/2026-11-25-ckw-w72-rekomendacja-likely-idle.md`
 
 ## Global constraints
 
