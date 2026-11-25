@@ -45,13 +45,14 @@
 - Zmodyfikuj: `hooks/state.ts:42-102`
 - Zmodyfikuj: `hooks/line/line-model.ts:1-60`
 - Zmodyfikuj: `hooks/line/line-view.tsx:22-47`
+- Zmodyfikuj: `README.md:104-119`
 - Test: `tests/decisions.test.ts`
 - Test: `tests/savings.test.ts:16-20`
 - Test: `tests/line.test.ts`
 
 **Interfejsy:**
 
-- Konsumuje: `PING_LEAD_MS`, `DEFAULT_MAX_PINGS` z `hooks/cache-timing.ts`; `isLongEnoughToKeepWarm` z `hooks/cache-timing.ts`.
+- Konsumuje: `PING_LEAD_MS`, `DEFAULT_MAX_PINGS` z `hooks/cache-timing.ts`; `isKeepingWarm` w `lineModel` (`hooks/line/line-model.ts:48-51`), który już zawiera `isLongEnoughToKeepWarm(ttl)`: cache krótszy niż 30 min (`API_TTL`) detalu nie ma bez osobnego warunku.
 - Produkuje (`hooks/savings.ts`): `export const READ_PRICE = 0.1`, `export const HOUR_WRITE_PRICE = 2` (dziś stałe prywatne, wartości bez zmian).
 - Produkuje (`hooks/idle-advice.ts`):
   - `export type ReturnCurve = readonly number[]`
@@ -124,6 +125,11 @@ for (let j = 1; j <= maxPings - pingsInRow; j++) {
 - `lineModel`: `advice` = tekst, gdy `isKeepingWarm`, `countdown.isWarm`, `stopAt === 0`, `outlook.kind === 'ping'`, `!isWaiting` i `isLikelyIdle({ firstPingAt: outlook.at, ttlMs: countdown.ttlMs, pingsInRow: pings.length, maxPings, curve: returnCurve })`; inaczej `''`. `details` bez zmian.
 - `drawLine`: przy niepustym `advice` osobne elementy zewnętrznego Boxa między Boxem detali a `model.main`: `<Box flexShrink={0}><Text color={TONE_COLORS.stalled}>{advice}</Text></Box>` i `dim('·')`. Poza Boxem detali (`overflow="hidden"`, dzieci od lewej, nadmiar ucinany z prawej) detal nie ginie pierwszy: w wąskim oknie ucinają się zwykłe detale, a rada zostaje przy czasie i przycisku (spec: „ostatni ucinany w wąskim oknie”). Zaktualizuj komentarz nad `drawLine`.
 - Komentarz nad `advice` w `LineModel`: rada, nie decyzja; mod sam nie wyłącza keep-warm.
+- README (reguła `dok-ten-sam-commit`, wzorzec: wiersz `󰁔 no ping: quiet hours to 08:00`, `README.md:110`): w tabeli „Reading the line” po wierszu `**󰆼 saved 90k**` wstaw:
+
+```markdown
+| **󰔢 likely idle: stop?** | Advice, in mustard: no further ping is likely to pay for itself, either because after a break this long people seldom come back or because the pings ahead would fall in the quiet hours, so you may want to press **Stop**. Keep-warm never stops by itself because of it. It shows only while keep-warm is holding a warm cache with a ping announced: not with a stop time you gave, not while a question waits for your answer, and not while the line says **no ping: quiet hours**. |
+```
 
 - [ ] **Krok 4: Uruchom, potwierdź pass**
 
@@ -136,7 +142,7 @@ Oczekiwany wynik: kod 0, przechodzą przypadki z Kroku 1 i dotychczasowe testy.
 - [ ] **Krok 5: Commit**
 
 ```bash
-git add hooks/idle-advice.ts hooks/savings.ts hooks/session-snapshot.ts hooks/state.ts hooks/line/line-model.ts hooks/line/line-view.tsx tests/decisions.test.ts tests/savings.test.ts tests/line.test.ts && git commit -m "ckw-w72: likely idle na linii po 3 pingach w serii"
+git add hooks/idle-advice.ts hooks/savings.ts hooks/session-snapshot.ts hooks/state.ts hooks/line/line-model.ts hooks/line/line-view.tsx tests/decisions.test.ts tests/savings.test.ts tests/line.test.ts README.md && git commit -m "ckw-w72: likely idle na linii po 3 pingach w serii"
 ```
 
 ## Task 2: Cisza nocna w wartości serii
@@ -185,7 +191,22 @@ Oczekiwany wynik: kod niezerowy, bo `isLikelyIdle` dla okna w ciszy zwraca `fals
 
 - Pingi serii: `t_j = firstPingAt + (j−1)·(ttlMs − PING_LEAD_MS)`, `E_j = t_j + ttlMs`, `E_0 = lastRequestAt + ttlMs`.
 - Seria kończy się przed pierwszym `t_j` (`j ≥ 2`), dla którego `isQuiet(t_j, quiet)`: wartości `EV` liczone tylko do `j − 1`. `t_1` to ping zapowiedziany przez linię, poza ciszą z założenia.
-- `f_j` = liczba pełnych minut `m` od `E_{j−1}` (włącznie) do `E_j` (wyłącznie), krok `MINUTE_MS`, z `!isQuiet(m, quiet)`, podzielona przez liczbę wszystkich takich minut; `p_j = hazard(n + j) · f_j`.
+- Okno pingu `j` to `(E_{j−1}, E_j]` (spec, „Seria pingów i jej wartość”): minuty `m = E_{j−1} + i·MINUTE_MS` dla `i = 1..⌊(E_j − E_{j−1}) / MINUTE_MS⌋`, liczone od `E_{j−1}`, nie od pełnej minuty zegara. `f_j` = liczba tych `m` z `!isQuiet(m, quiet)` podzielona przez liczbę wszystkich `m`.
+- `p_j = hazard(curve, pingsInRow + j) · f_j` zastępuje `hazard(...)` w rekurencji z Task 1, czyli w `stayed` i tym samym w koszcie kolejnych pingów (wzór specu `EV(k) = 1.9 · (1 − Π_{j≤k}(1 − p_j)) − 0.1 · Σ_{j≤k} Π_{i<j}(1 − p_i)`):
+
+```ts
+let stayed = 1, cost = 0
+for (let j = 1; j <= maxPings - pingsInRow; j++) {
+  const pingAt = firstPingAt + (j - 1) * (ttlMs - PING_LEAD_MS)
+  if (j >= 2 && isQuiet(pingAt, quiet)) break
+  const windowStart = j === 1 ? lastRequestAt + ttlMs : pingAt - (ttlMs - PING_LEAD_MS) + ttlMs
+  cost += READ_PRICE * stayed
+  stayed *= 1 - hazard(curve, pingsInRow + j) * awakeShare(windowStart, pingAt + ttlMs, quiet)
+  values.push(RETURN_GAIN * (1 - stayed) - cost)
+}
+```
+
+- `awakeShare(from, to, quiet)` — mała czysta funkcja modułu: udział minut `(from, to]` poza ciszą (wyżej); przy `quiet.kind === 'off'` zwraca 1, więc wyniki Task 1 się nie zmieniają.
 - Cisza `invalid` liczy się jak cisza przez cały dzień (`isQuiet`), ale linia wtedy nie zapowiada pingu, więc detalu nie ma.
 - `lineModel` przekazuje `lastRequestAt` i `quiet` ze snapshotu.
 
@@ -210,6 +231,7 @@ git add hooks/idle-advice.ts hooks/line/line-model.ts tests/decisions.test.ts &&
 - Zmodyfikuj: `hooks/idle-advice.ts`
 - Zmodyfikuj: `hooks/session-store.ts:10-34`
 - Zmodyfikuj: `types/index.d.ts:22-26`
+- Zmodyfikuj: `README.md:220-232`
 - Test: `tests/decisions.test.ts`
 - Test: `tests/keep-warm.test.ts`
 
@@ -260,6 +282,11 @@ Oczekiwany wynik: kod niezerowy, bo brak eksportu `parseReturnCurve` z `hooks/id
 - Komentarz nad `RETURN_CURVE_KEY`: wspólny dla sesji, zapisuje go kalibracja (ckw-4k7); nie zaczyna się od `session:`, więc tygodniowe sprzątanie go nie usuwa.
 - Odczyt tylko w `openSessionStore`, bez zapisu: klucze store w istniejących testach się nie zmieniają.
 - `types/index.d.ts`: w komentarzu nad `KeepWarmTtl` (obok zdania o `plan-ttl`) dopisz: `$.store` trzyma też `return-curve`, wspólny dla sesji: szanse powrotu w oknie każdego kolejnego pingu, 1 do 20 liczb od 0 do 1; inna wartość daje krzywą domyślną.
+- README jest polityką prywatności (`privacyPolicyUrl`): nowy odczyt trafia do „What it reads” w tym samym commicie. Po punkcie **Its own settings** wstaw:
+
+```markdown
+- **Its own stored return curve**, if one is saved in the plugin's storage on your computer (`return-curve`): the chances of your return during each further ping, which the **likely idle** advice weighs. Without one it uses a built-in curve.
+```
 
 - [ ] **Krok 4: Uruchom, potwierdź pass**
 
@@ -272,61 +299,7 @@ Oczekiwany wynik: kod 0, przechodzą przypadki z Kroku 1; walidator listuje `sto
 - [ ] **Krok 5: Commit**
 
 ```bash
-git add hooks/idle-advice.ts hooks/session-store.ts types/index.d.ts tests/decisions.test.ts tests/keep-warm.test.ts && git commit -m "ckw-w72: krzywa powrotu z return-curve w store"
-```
-
-## Task 4: README
-
-**Pliki:**
-
-- Zmodyfikuj: `README.md:104-119`
-- Zmodyfikuj: `README.md:220-232`
-
-**Interfejsy:**
-
-- Konsumuje: tekst detalu `󰔢 likely idle: stop?` i klucz `return-curve` (Task 1, Task 3).
-- Produkuje: brak.
-
-**Wzorce:**
-
-- `README.md:110` - wiersz `󰁔 no ping: quiet hours to 08:00`: co widać, co znaczy, kiedy się pojawia.
-
-**Reguły stosowalne:**
-
-- `documentation` — README jest polityką prywatności (`privacyPolicyUrl`): nowy odczyt trafia do „What it reads” w tej samej zmianie.
-
-**Tryb wykonania (rekomendacja):** inline-batch — dwie wstawki tekstu podane dosłownie.
-
-**Wykonawca (rekomendacja):** claude / trivial — treść dosłowna, bez kodu.
-
-Bez TDD: zmiana treści README bez testu treści.
-
-- [ ] **Krok 3: Zaimplementuj minimalnie**
-
-- W tabeli „Reading the line” po wierszu `**󰆼 saved 90k**` wstaw:
-
-```markdown
-| **󰔢 likely idle: stop?** | Advice, in mustard: from how often people come back after a break this long, no further pings are likely to pay for themselves, so you may want to press **Stop**. Keep-warm never stops by itself because of it. It shows only while keep-warm is holding a warm cache with a ping ahead: not with a stop time you gave, not while a question waits for your answer, and not in the quiet hours. |
-```
-
-- W „What it reads” po punkcie **Its own settings** wstaw:
-
-```markdown
-- **Its own stored return curve**, if one is saved in the plugin's storage on your computer (`return-curve`): the chances of your return during each further ping, which the **likely idle** advice weighs. Without one it uses a built-in curve.
-```
-
-- [ ] **Krok 4: Uruchom, potwierdź pass**
-
-```bash
-claude plugin validate --strict ./.claude-plugin/plugin.json && claude plugin test .
-```
-
-Oczekiwany wynik: kod 0, README nie wpływa na walidację ani testy.
-
-- [ ] **Krok 5: Commit**
-
-```bash
-git add README.md && git commit -m "ckw-w72: README o likely idle i return-curve"
+git add hooks/idle-advice.ts hooks/session-store.ts types/index.d.ts tests/decisions.test.ts tests/keep-warm.test.ts README.md && git commit -m "ckw-w72: krzywa powrotu z return-curve w store"
 ```
 
 ## Po wydaniu
