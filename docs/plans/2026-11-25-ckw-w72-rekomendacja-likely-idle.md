@@ -89,11 +89,12 @@ Plik `tests/decisions.test.ts`; helper `snapshot` (`tests/decisions.test.ts:169-
 - `isLikelyIdle: no ping left` — `isLikelyIdle(idleCheck(6, 6))` = `false`, `seriesValues(idleCheck(6, 6))` = `[]`.
 - `isLikelyIdle: past the table the last value` — `isLikelyIdle(idleCheck(10, 20))` = `true`.
 - `lineModel: likely idle after 3 pings in a row` — `snapshot({ isOn: true, pings: THREE })`: `advice` = `'󰔢 likely idle: stop?'`, `tone` = `'keeping'`.
-- `lineModel: no advice where the user decides or keep-warm cannot ping` — przy `pings: THREE` `advice` = `''` dla: `isOn: false`; `stopAt: START + 3 * HOUR`; `isWaiting: true`; `pingError: 'HTTP 400'`; `ttl: API_TTL`; `now: START + 61 * MINUTE` (zimny); `maxPings: 3`; `lastRequestAt: at(20, 38), now: at(20, 38)` (linia mówi „no ping: quiet hours”); `pings: THREE.slice(0, 2)`.
+- `lineModel: no advice where the user decides or keep-warm cannot ping` — przy `pings: THREE` `advice` = `''` dla: `isOn: false`; `stopAt: START + 3 * HOUR`; `isWaiting: true`; `pingError: 'HTTP 400'`; `ttl: API_TTL`; `lastRequestAt: START, now: START + 61 * MINUTE` (zimny: `countdownOf` liczy tylko z `lastRequestAt`, `hooks/line/line-model.ts:62-66`, `pings` go nie przesuwają); `maxPings: 3`; `lastRequestAt: at(20, 38), now: at(20, 38)` (linia mówi „no ping: quiet hours”); `pings: THREE.slice(0, 2)`.
 
 Plik `tests/line.test.ts` (import `keepwarm` z `./engine`):
 
 - `likely idle after 3 pings in a row, until Stop` — `stubEngine`, `start`, `answer(WRITE)`, `keepwarm('on')`, 2× `clock.advance(52 * MINUTE)`: linia nie zawiera `likely idle`; trzeci `advance(52 * MINUTE)`: linia zawiera `'54k cached·󰔢 likely idle: stop?·'`; `advance(10 * MINUTE)`: nadal zawiera, `keepwarm('status')` zaczyna się od `Keep-warm on`; `pressToggle`: linia nie zawiera `likely idle`.
+- `likely idle in mustard` (spec, „Testy”; KA-2) — ten sam przebieg do trzeciego `advance`, potem z `$.ui.mount` (jak `line` w `tests/engine.ts:157-160`) znajdź element z tekstem `󰔢 likely idle: stop?` i sprawdź jego `color` = `'#b5a55f'`. Najpierw ustal w `.claude-plugin/types/claude-code/index.d.ts` (piszę go Claude Code przy ładowaniu moda) albo w skillu `plugin-authoring`, czy uchwyt z `ui.mount` / `ui.find` oddaje właściwości `Text`. Jeśli nie oddaje, pomiń ten test i dopisz do planu sekcję `## Odstępstwa`: kolor rady sprawdzany tylko ręcznie w „Po wydaniu”, z cytatem z typów pokazującym brak dostępu do właściwości.
 
 - [ ] **Krok 2: Uruchom, potwierdź fail**
 
@@ -124,7 +125,7 @@ for (let j = 1; j <= maxPings - pingsInRow; j++) {
 - `firstPingAt` i `ttlMs` są w `IdleCheck` dla Task 2 (czasy pingów `t_j = firstPingAt + (j−1)·(ttlMs − PING_LEAD_MS)`); w tym tasku rachunek ich nie używa, nie usuwaj ich z typu.
 - `lineModel`: `advice` = tekst, gdy `isKeepingWarm`, `countdown.isWarm`, `stopAt === 0`, `outlook.kind === 'ping'`, `!isWaiting` i `isLikelyIdle({ firstPingAt: outlook.at, ttlMs: countdown.ttlMs, pingsInRow: pings.length, maxPings, curve: returnCurve })`; inaczej `''`. `details` bez zmian.
 - `drawLine`: przy niepustym `advice` osobne elementy zewnętrznego Boxa między Boxem detali a `model.main`: `<Box flexShrink={0}><Text color={TONE_COLORS.stalled}>{advice}</Text></Box>` i `dim('·')`. Poza Boxem detali (`overflow="hidden"`, dzieci od lewej, nadmiar ucinany z prawej) detal nie ginie pierwszy: w wąskim oknie ucinają się zwykłe detale, a rada zostaje przy czasie i przycisku (spec: „ostatni ucinany w wąskim oknie”). Zaktualizuj komentarz nad `drawLine`.
-- Komentarz nad `advice` w `LineModel`: rada, nie decyzja; mod sam nie wyłącza keep-warm.
+- Komentarz nad `advice` w `LineModel` (dosłownie): `// Advice, not a decision: keep-warm never switches itself off because of it.`
 - README (reguła `dok-ten-sam-commit`, wzorzec: wiersz `󰁔 no ping: quiet hours to 08:00`, `README.md:110`): w tabeli „Reading the line” po wierszu `**󰆼 saved 90k**` wstaw:
 
 ```markdown
@@ -279,9 +280,9 @@ Oczekiwany wynik: kod niezerowy, bo brak eksportu `parseReturnCurve` z `hooks/id
 
 - [ ] **Krok 3: Zaimplementuj minimalnie**
 
-- Komentarz nad `RETURN_CURVE_KEY`: wspólny dla sesji, zapisuje go kalibracja (ckw-4k7); nie zaczyna się od `session:`, więc tygodniowe sprzątanie go nie usuwa.
+- Komentarz nad `RETURN_CURVE_KEY` (dosłownie): `// Shared by every session; the calibration (ckw-4k7) writes it. It does not start with "session:", so the weekly clean-up keeps it.`
 - Odczyt tylko w `openSessionStore`, bez zapisu: klucze store w istniejących testach się nie zmieniają.
-- `types/index.d.ts`: w komentarzu nad `KeepWarmTtl` (obok zdania o `plan-ttl`) dopisz: `$.store` trzyma też `return-curve`, wspólny dla sesji: szanse powrotu w oknie każdego kolejnego pingu, 1 do 20 liczb od 0 do 1; inna wartość daje krzywą domyślną.
+- `types/index.d.ts`: w komentarzu nad `KeepWarmTtl` (obok zdania o `plan-ttl`) dopisz dosłownie: `$.store also holds return-curve, shared by every session: the chance of a return within each further ping's window, 1 to 20 numbers from 0 to 1; any other value means the default curve.`
 - README jest polityką prywatności (`privacyPolicyUrl`): nowy odczyt trafia do „What it reads” w tym samym commicie. Po punkcie **Its own settings** wstaw:
 
 ```markdown
@@ -304,4 +305,4 @@ git add hooks/idle-advice.ts hooks/session-store.ts types/index.d.ts tests/decis
 
 ## Po wydaniu
 
-- Sprawdź detal w prawdziwej linii aplikacji desktop: glif `󰔢` i musztarda `#b5a55f` (kit testów nie widzi kolorów ani glifów, `.claude/CLAUDE.md`, „Checking a change”).
+- Sprawdź detal w prawdziwej linii aplikacji desktop: glif `󰔢` i musztarda `#b5a55f` (glify i odstępy w aplikacji wyglądają inaczej niż w teście; kolor sprawdza test z Task 1, o ile kit go oddaje).
