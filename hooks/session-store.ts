@@ -14,7 +14,8 @@ const STORE_MAX_AGE_MS = 7 * 24 * HOUR_MS
 // only with a response, so a session reopened after a relaunch would otherwise not know its
 // cache length (and could not keep it warm) until its first answer.
 const PLAN_TTL_KEY = 'plan-ttl'
-// Shared by every session; the calibration (ckw-4k7) writes it. It does not start with "session:", so the weekly clean-up keeps it.
+// Shared by every session; the calibration (ckw-4k7) writes it. It does not start with
+// "session:", so the weekly clean-up keeps it.
 const RETURN_CURVE_KEY = 'return-curve'
 
 export async function save($: EngineInterface) {

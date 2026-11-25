@@ -46,7 +46,7 @@ export function seriesValues({ lastRequestAt, firstPingAt, ttlMs, pingsInRow, ma
   for (let j = 1; j <= maxPings - pingsInRow; j++) {
     const pingAt = firstPingAt + (j - 1) * (ttlMs - PING_LEAD_MS)
     if (j >= 2 && isQuiet(pingAt, quiet)) break
-    const windowStart = j === 1 ? lastRequestAt + ttlMs : pingAt - (ttlMs - PING_LEAD_MS) + ttlMs
+    const windowStart = j === 1 ? lastRequestAt + ttlMs : pingAt + PING_LEAD_MS
     cost += READ_PRICE * stayed
     stayed *= 1 - hazard(curve, pingsInRow + j) * awakeShare(windowStart, pingAt + ttlMs, quiet)
     values.push(RETURN_GAIN * (1 - stayed) - cost)
