@@ -12,6 +12,15 @@ export type ReturnCurve = readonly number[]
 // From the calibration of 2026-11-16: 997 breaks longer than 52 min over 10.7 weeks.
 export const DEFAULT_RETURN_CURVE: ReturnCurve = [0.183, 0.110, 0.063, 0.040, 0.037, 0.023, 0.012, 0.002]
 
+const MAX_CURVE_LENGTH = 20
+
+// A curve read from the store: 1 to 20 numbers from 0 to 1, or the default for anything else.
+export function parseReturnCurve(value: unknown): ReturnCurve {
+  const isCurve = Array.isArray(value) && value.length >= 1 && value.length <= MAX_CURVE_LENGTH &&
+    value.every(chance => typeof chance === 'number' && Number.isFinite(chance) && chance >= 0 && chance <= 1)
+  return isCurve ? value : DEFAULT_RETURN_CURVE
+}
+
 // `lastRequestAt`: the request the cache is warm from; `firstPingAt`: the ping the line announces
 // (outside the quiet hours); `ttlMs`: the cache's length.
 export type IdleCheck = {

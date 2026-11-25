@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { DEFAULT_MAX_PINGS, pingLimit } from '../hooks/cache-timing'
 import { parseStop, statusText } from '../hooks/command'
-import { DEFAULT_RETURN_CURVE, isLikelyIdle, seriesValues } from '../hooks/idle-advice'
+import { DEFAULT_RETURN_CURVE, isLikelyIdle, parseReturnCurve, seriesValues } from '../hooks/idle-advice'
 import { NO_SAVINGS } from '../hooks/savings'
 import { lineModel } from '../hooks/line/line-model'
 import { decidePing, isQuiet, isTooFullForVisiblePing, type PingCheck } from '../hooks/ping/decide-ping'
@@ -311,4 +311,21 @@ test('lineModel: no advice where the user decides or keep-warm cannot ping', asy
   expect(advice({ maxPings: 3 })).toEqual('')
   expect(advice({ lastRequestAt: at(20, 38), now: at(20, 38) })).toEqual('')
   expect(advice({ pings: THREE.slice(0, 2) })).toEqual('')
+})
+
+test('parseReturnCurve: a list of 1 to 20 numbers from 0 to 1', async () => {
+  expect(parseReturnCurve([0.5])).toEqual([0.5])
+  expect(parseReturnCurve([0, 1])).toEqual([0, 1])
+  const twenty = Array(20).fill(0.1)
+  expect(parseReturnCurve(twenty)).toEqual(twenty)
+})
+
+test('parseReturnCurve: anything else is the default curve', async () => {
+  const unreadable = [undefined, 'x', [], Array(21).fill(0.1), [0.2, 1.5], [0.2, -0.1], [NaN], [0.2, '0.3']]
+  for (const value of unreadable) expect(parseReturnCurve(value)).toEqual(DEFAULT_RETURN_CURVE)
+})
+
+test('lineModel: a curve whose 4th ping pays keeps quiet at n = 3', async () => {
+  const line = lineModel(snapshot({ isOn: true, pings: THREE, returnCurve: [0.183, 0.110, 0.063, 0.2] }))
+  expect(line.advice).toEqual('')
 })

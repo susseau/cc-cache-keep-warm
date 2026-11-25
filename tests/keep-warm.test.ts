@@ -411,3 +411,33 @@ test('a zero-usage step is no answer', async ($, on) => {
   await answer($, engine, NO_USAGE)
   expect(await line($)).toEqual('nothing cached yet······ 󰐊 Warm ')
 })
+
+test('return-curve in the store: the line follows it', async ($, on) => {
+  const { engine, clock } = stubEngine(on, { store: { 'return-curve': [0] } })
+  await start($)
+  await answer($, engine, WRITE)
+  await keepwarm($, 'on')
+  await clock.advance(MINUTE)
+  expect(await line($)).toContain('54k cached·󰔢 likely idle: stop?·59 min left')
+})
+
+test('a return-curve it cannot read: the default curve', async ($, on) => {
+  const { engine, clock } = stubEngine(on, { store: { 'return-curve': 'nonsense' } })
+  await start($)
+  await answer($, engine, WRITE)
+  await keepwarm($, 'on')
+  await clock.advance(MINUTE)
+  expect(await line($)).not.toContain('likely idle')
+})
+
+test('/clear reads return-curve again', async ($, on) => {
+  const { engine, clock } = stubClearableEngine(on)
+  await start($)
+  await answer($, engine, WRITE)
+  await keepwarm($, 'on')
+  engine.store['return-curve'] = [0]
+  await clear($, engine)
+  await answer($, engine, WRITE)
+  await clock.advance(MINUTE)
+  expect(await line($)).toContain('󰔢 likely idle: stop?')
+})

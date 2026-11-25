@@ -224,6 +224,7 @@ With the setting **Mark the session title** off, the mod never adds the mark; it
 - **This session's figures** from Claude Code: the conversation's size, the cache, input and output tokens of each request (to count what keep-warm cost and saved), and whether your plan's usage limits are reported (which tells a subscription from an API key). After a restart, while the next ping would be the visible one, also the free space left in the context window and the size of the instruction files (their token counts only, never their text), to check the visible ping fits.
 - **When you reopen a session**, what Claude Code tells mods at that moment: how long ago the session's last answer came and how big the conversation is. That lets the countdown carry on before your first message.
 - **Its own settings**: the ones in the table above, quiet hours included.
+- **Its own stored return curve**, if one is saved in the plugin's storage on your computer (`return-curve`): the chances of your return during each further ping, which the **likely idle** advice weighs. Without one it uses a built-in curve.
 - **The clock**, and its local time of day for the quiet hours.
 
 It checks these once a minute, on your computer, and sends none of them anywhere. It does not read your files.
