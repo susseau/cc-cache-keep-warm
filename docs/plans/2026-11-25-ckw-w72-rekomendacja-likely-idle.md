@@ -21,7 +21,7 @@
 
 - `hooks/idle-advice.ts` (nowy) — decyduje, czy dalsze pingi serii się opłacają; zależy od: `hooks/savings.ts`, `hooks/cache-timing.ts`, `hooks/ping/decide-ping.ts`, `hooks/quiet-hours.ts`
 - `hooks/savings.ts` → bez kodu: eksport `READ_PRICE` i `HOUR_WRITE_PRICE`; zależy od: brak
-- `hooks/session-snapshot.ts` — typ wartości sesji widzianych przez czyste decyzje; zależy od: brak
+- `hooks/session-snapshot.ts` — typ wartości sesji widzianych przez czyste decyzje; zależy od: `hooks/idle-advice.ts`
 - `hooks/state.ts` — wartości sesji w `$.state` i zmienne modułu; zależy od: `hooks/idle-advice.ts`
 - `hooks/session-store.ts` — wartości w store wspólnym dla sesji; zależy od: `hooks/idle-advice.ts`, `hooks/state.ts`
 - `hooks/line/line-model.ts` — decyduje, co mówi linia; zależy od: `hooks/idle-advice.ts`, `hooks/session-snapshot.ts`
@@ -29,8 +29,9 @@
 - `types/index.d.ts` → bez kodu: komentarz o kluczu return-curve w store; zależy od: brak
 - `README.md` — dokumentacja użytkownika i polityka prywatności; zależy od: brak
 - `tests/decisions.test.ts` — testy czystych decyzji; zależy od: `hooks/idle-advice.ts`, `hooks/line/line-model.ts`
-- `tests/savings.test.ts` → bez kodu: helper `snapshot` z nowymi polami; zależy od: `hooks/session-snapshot.ts`
+- `tests/savings.test.ts` — testy rachunku keep-warm; helper `snapshot` z nowymi polami i import `DEFAULT_RETURN_CURVE`; zależy od: `hooks/session-snapshot.ts`, `hooks/idle-advice.ts`
 - `tests/line.test.ts` — testy linii przez stub engine; zależy od: `tests/engine.ts`
+- `tests/keep-warm.test.ts` — testy moda przez stub engine (store, `/clear`); zależy od: `tests/engine.ts`
 
 ---
 
@@ -79,13 +80,13 @@
 
 - [ ] **Krok 1: Napisz failing test**
 
-Plik `tests/decisions.test.ts`; helper `snapshot` (`tests/decisions.test.ts:169-173`) i helper w `tests/savings.test.ts:16-20` dostają `maxPings: DEFAULT_MAX_PINGS` (w `savings.test.ts` liczba `6`) i `returnCurve: DEFAULT_RETURN_CURVE`. Test `lineModel: keeping while on…` (`toEqual` całego modelu) dostaje `advice: ''`. `THREE = [1, 2, 3].map(i => ({ at: START + i * 52 * MINUTE, isHit: true, read: 54_000 }))`, `check = (n, maxPings = 6) => ({ firstPingAt: START + 52 * MINUTE, ttlMs: HOUR, pingsInRow: n, maxPings, curve: DEFAULT_RETURN_CURVE })`:
+Plik `tests/decisions.test.ts`; helper `snapshot` (`tests/decisions.test.ts:169-173`) i helper w `tests/savings.test.ts:16-20` dostają `maxPings: DEFAULT_MAX_PINGS` (w `savings.test.ts` liczba `6`) i `returnCurve: DEFAULT_RETURN_CURVE` (w `savings.test.ts` z nowym importem `DEFAULT_RETURN_CURVE` z `../hooks/idle-advice`). Test `lineModel: keeping while on…` (`toEqual` całego modelu) dostaje `advice: ''`. `THREE = [1, 2, 3].map(i => ({ at: START + i * 52 * MINUTE, isHit: true, read: 54_000 }))`, nowy helper `idleCheck = (n, maxPings = 6) => ({ firstPingAt: START + 52 * MINUTE, ttlMs: HOUR, pingsInRow: n, maxPings, curve: DEFAULT_RETURN_CURVE })` (nie `check`: ta nazwa należy już do helpera `PingCheck` w `tests/decisions.test.ts:69`):
 
-- `seriesValues: a ping that pays at n = 2` — `seriesValues(check(2))[0]` większe od 0 (≈ 0.0197).
-- `isLikelyIdle: no series pays from n = 3 with the default curve` — `isLikelyIdle(check(3))` = `true`; każda wartość `seriesValues(check(3))` `≤ 0`.
+- `seriesValues: a ping that pays at n = 2` — `seriesValues(idleCheck(2))[0]` większe od 0 (≈ 0.0197).
+- `isLikelyIdle: no series pays from n = 3 with the default curve` — `isLikelyIdle(idleCheck(3))` = `true`; każda wartość `seriesValues(idleCheck(3))` `≤ 0`.
 - `isLikelyIdle: worth it at n = 0, 1, 2` — `false` dla każdego.
-- `isLikelyIdle: no ping left` — `isLikelyIdle(check(6, 6))` = `false`, `seriesValues(check(6, 6))` = `[]`.
-- `isLikelyIdle: past the table the last value` — `isLikelyIdle(check(10, 20))` = `true`.
+- `isLikelyIdle: no ping left` — `isLikelyIdle(idleCheck(6, 6))` = `false`, `seriesValues(idleCheck(6, 6))` = `[]`.
+- `isLikelyIdle: past the table the last value` — `isLikelyIdle(idleCheck(10, 20))` = `true`.
 - `lineModel: likely idle after 3 pings in a row` — `snapshot({ isOn: true, pings: THREE })`: `advice` = `'󰔢 likely idle: stop?'`, `tone` = `'keeping'`.
 - `lineModel: no advice where the user decides or keep-warm cannot ping` — przy `pings: THREE` `advice` = `''` dla: `isOn: false`; `stopAt: START + 3 * HOUR`; `isWaiting: true`; `pingError: 'HTTP 400'`; `ttl: API_TTL`; `now: START + 61 * MINUTE` (zimny); `maxPings: 3`; `lastRequestAt: at(20, 38), now: at(20, 38)` (linia mówi „no ping: quiet hours”); `pings: THREE.slice(0, 2)`.
 
@@ -121,7 +122,7 @@ for (let j = 1; j <= maxPings - pingsInRow; j++) {
 
 - `firstPingAt` i `ttlMs` są w `IdleCheck` dla Task 2 (czasy pingów `t_j = firstPingAt + (j−1)·(ttlMs − PING_LEAD_MS)`); w tym tasku rachunek ich nie używa, nie usuwaj ich z typu.
 - `lineModel`: `advice` = tekst, gdy `isKeepingWarm`, `countdown.isWarm`, `stopAt === 0`, `outlook.kind === 'ping'`, `!isWaiting` i `isLikelyIdle({ firstPingAt: outlook.at, ttlMs: countdown.ttlMs, pingsInRow: pings.length, maxPings, curve: returnCurve })`; inaczej `''`. `details` bez zmian.
-- `drawLine`: przy niepustym `advice` ostatni element Boxa detali (po `details`) to `<Box flexShrink={0}><Text color={TONE_COLORS.stalled}>{advice}</Text></Box>` i `dim('·')`; w wąskim oknie ucina się razem z detalami.
+- `drawLine`: przy niepustym `advice` osobne elementy zewnętrznego Boxa między Boxem detali a `model.main`: `<Box flexShrink={0}><Text color={TONE_COLORS.stalled}>{advice}</Text></Box>` i `dim('·')`. Poza Boxem detali (`overflow="hidden"`, dzieci od lewej, nadmiar ucinany z prawej) detal nie ginie pierwszy: w wąskim oknie ucinają się zwykłe detale, a rada zostaje przy czasie i przycisku (spec: „ostatni ucinany w wąskim oknie”). Zaktualizuj komentarz nad `drawLine`.
 - Komentarz nad `advice` w `LineModel`: rada, nie decyzja; mod sam nie wyłącza keep-warm.
 
 - [ ] **Krok 4: Uruchom, potwierdź pass**
@@ -166,7 +167,7 @@ git add hooks/idle-advice.ts hooks/savings.ts hooks/session-snapshot.ts hooks/st
 
 - [ ] **Krok 1: Napisz failing test**
 
-Plik `tests/decisions.test.ts` (`at`, `QUIET`, `HOUR` jak w pliku); istniejący `check` dostaje `lastRequestAt: START, quiet: QUIET`:
+Plik `tests/decisions.test.ts` (`at`, `QUIET`, `HOUR` jak w pliku); helper `idleCheck` z Task 1 dostaje `lastRequestAt: START, quiet: QUIET` (helper `check` od `PingCheck` bez zmian):
 
 - `isLikelyIdle: a ping whose window is mostly quiet hours does not pay` — `{ lastRequestAt: at(20, 28), firstPingAt: at(21, 20), ttlMs: HOUR, pingsInRow: 0, maxPings: 6, curve: DEFAULT_RETURN_CURVE, quiet: QUIET }` → `true`; `seriesValues(...)` ma długość 1 (drugi ping 22:12 wypada w ciszy).
 - `isLikelyIdle: the same ping without quiet hours pays` — to samo z `quiet: { kind: 'off' }` → `false`.
